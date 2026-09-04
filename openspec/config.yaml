@@ -1,0 +1,20 @@
+schema: spec-driven
+
+context: |
+  Tech stack: React Native + Expo + TypeScript
+  Backend: Spring Boot API at localhost:8080 (10.0.2.2:8080 for Android emulator), LiveKit for video/audio
+  Architecture: React Native client consuming Spring Boot control plane and LiveKit WebRTC media server
+  Style: Theme.ts with Playfair Display and Inter fonts, serene ecclesiastical palette (--azul-profundo, --azul-medio, --azul-suave, --azul-pastel)
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include architecture decisions and flow diagrams
+    - Document UI state transitions
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session

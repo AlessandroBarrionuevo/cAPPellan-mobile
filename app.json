@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "tmp-expo-project",
+    "slug": "capellanes-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.tmpexpoproject"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-asset"
+    ],
+    "owner": "alessandrobarrionuevos-team",
+    "extra": {
+      "eas": {
+        "projectId": "80e6cc1f-2583-4231-9976-18aa4c67f7b6"
+      }
+    }
+  }
+}
