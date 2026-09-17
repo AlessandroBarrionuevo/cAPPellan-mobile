@@ -13,7 +13,7 @@ import {
 import { Theme, globalStyles } from '../theme/Theme';
 import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
-import type { AuthUser, AppRole } from '../../types/api';
+import type { AuthUser, AppRole } from '../types/api';
 import {
   UserPlus,
   Shield,
@@ -199,6 +199,7 @@ export default function SuperuserDashboard() {
                     'BASIC',
                     'CHAPLAIN',
                     'CHAPLAIN_LEADER',
+                    'CHAPLAIN_CONTENT_LEADER',
                     'SUPERUSER',
                   ] as AppRole[]
                 ).map((r) => (

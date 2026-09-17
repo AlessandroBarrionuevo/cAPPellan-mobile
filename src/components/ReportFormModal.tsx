@@ -22,10 +22,9 @@ interface ReportFormModalProps {
 }
 
 const CATEGORIES = [
-  { key: 'SPIRITUAL', label: 'Espiritual' },
-  { key: 'FAMILY', label: 'Familiar' },
-  { key: 'PERSONAL', label: 'Personal' },
-  { key: 'CRISIS', label: 'Crisis' },
+  { key: 'SPIRITUAL_COUNSELING', label: 'Consejería Espiritual' },
+  { key: 'EMOTIONAL_CRISIS', label: 'Crisis Emocional' },
+  { key: 'PRAYER_REQUEST', label: 'Petición de Oración' },
   { key: 'OTHER', label: 'Otro' },
 ] as const;
 
@@ -36,7 +35,9 @@ export default function ReportFormModal({
   onSubmitted,
 }: ReportFormModalProps) {
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState<'SPIRITUAL' | 'FAMILY' | 'PERSONAL' | 'CRISIS' | 'OTHER'>('SPIRITUAL');
+  const [category, setCategory] = useState<
+    'SPIRITUAL_COUNSELING' | 'EMOTIONAL_CRISIS' | 'PRAYER_REQUEST' | 'OTHER'
+  >('SPIRITUAL_COUNSELING');
   const [severity, setSeverity] = useState(3);
   const [summary, setSummary] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);

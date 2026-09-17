@@ -2,25 +2,39 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { useAuthStore } from '../lib/stores/auth';
-import { Lock, User, Sparkles, AlertCircle } from 'lucide-react-native';
+import {
+  InstitutionalEmblem,
+  TacticalInput,
+  TacticalButton,
+  TacticalCard,
+  ConfidentialityBanner,
+} from '../components/common';
+import { Mail, Lock, ShieldCheck, Check } from 'lucide-react-native';
 
 interface LoginScreenProps {
   onSuccess?: () => void;
+  onNavigateToRegister?: () => void;
+  onNavigateToForgotPassword?: () => void;
 }
 
-export default function LoginScreen({ onSuccess }: LoginScreenProps) {
+export default function LoginScreen({
+  onSuccess,
+  onNavigateToRegister,
+  onNavigateToForgotPassword,
+}: LoginScreenProps) {
+  const { width } = useWindowDimensions();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,7 +42,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
-      setError('Por favor ingresá tu usuario y contraseña');
+      setError('Por favor ingresá tu correo o credencial y contraseña.');
       return;
     }
 
@@ -38,98 +52,121 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
       await login(username.trim(), password.trim());
       onSuccess?.();
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+      setError(err.message || 'Credenciales inválidas o error de conexión.');
     } finally {
       setLoading(false);
     }
   };
 
+  const isTablet = width > 500;
+
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={[
+          styles.scrollContainer,
+          isTablet && styles.tabletContainer,
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        {/* Top Visual Emblem */}
+        {/* Header Emblem & Institutional Branding */}
         <View style={styles.headerArea}>
-          <View style={styles.emblemWrapper}>
-            <Sparkles size={28} color={Theme.colors.primary} />
+          <View style={[styles.emblemWrapper, globalStyles.shadowSm]}>
+            <InstitutionalEmblem size={68} />
           </View>
-          <Text style={styles.title}>
-            Capellan<Text style={{ color: Theme.colors.secondary }}>APP</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.titlePrefix}>c</Text>
+            <Text style={styles.titleApp}>APP</Text>
+            <Text style={styles.titleSuffix}>ellan</Text>
+          </View>
+          <Text style={styles.subtitle}>
+            Servicio y Contención Espiritual para Fuerzas Armadas y de Seguridad
           </Text>
-          <Text style={styles.subtitle}>Servicio de Acompañamiento Espiritual</Text>
         </View>
 
-        {/* Card Form */}
-        <View style={[styles.card, globalStyles.shadowSoft]}>
-          <Text style={styles.cardTitle}>Iniciar Sesión</Text>
+        {/* Main Login Card */}
+        <TacticalCard style={styles.loginCard} padding={22}>
+          <Text style={styles.cardTitle}>Bienvenido de nuevo</Text>
           <Text style={styles.cardSubtitle}>
-            Ingresá tus credenciales para acceder al servicio
+            Ingresá tus credenciales seguras para acceder a tu espacio de acompañamiento y contención.
           </Text>
 
-          {error && (
-            <View style={styles.errorBanner}>
-              <AlertCircle size={18} color={Theme.colors.error} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
+          {/* Input: Correo o Credencial */}
+          <TacticalInput
+            label="CORREO ELECTRÓNICO O CREDENCIAL"
+            placeholder="Ej. nombre@gmail.com o legajo"
+            value={username}
+            onChangeText={setUsername}
+            leftIcon={<Mail size={18} color={Theme.colors.secondary} />}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
 
-          {/* Username Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Usuario</Text>
-            <View style={styles.inputContainer}>
-              <User size={18} color={Theme.colors.outline} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Ingresá tu usuario"
-                placeholderTextColor="#A0A5AF"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+          {/* Input: Contraseña */}
+          <TacticalInput
+            label="CONTRASEÑA DE SEGURIDAD"
+            placeholder="••••••••••••"
+            value={password}
+            onChangeText={setPassword}
+            isPassword
+            leftIcon={<Lock size={18} color={Theme.colors.secondary} />}
+            error={error}
+          />
+
+          {/* Utilities: Remember Device & Forgot Password */}
+          <View style={styles.utilsRow}>
+            <TouchableOpacity
+              style={styles.rememberRow}
+              onPress={() => setRememberDevice((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkbox, rememberDevice && styles.checkboxActive]}>
+                {rememberDevice && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+              </View>
+              <Text style={styles.rememberText}>Recordar dispositivo seguro</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onNavigateToForgotPassword}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Password Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Contraseña</Text>
-            <View style={styles.inputContainer}>
-              <Lock size={18} color={Theme.colors.outline} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Ingresá tu contraseña"
-                placeholderTextColor="#A0A5AF"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-              />
-            </View>
-          </View>
-
-          {/* Submit Button */}
-          <TouchableOpacity
-            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+          {/* Primary Action Button */}
+          <TacticalButton
+            title="Iniciar Sesión Segura"
             onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color={Theme.colors.onPrimary} />
-            ) : (
-              <Text style={styles.loginButtonText}>Ingresar</Text>
-            )}
+            loading={loading}
+            variant="secondary"
+            size="lg"
+            leftIcon={<ShieldCheck size={20} color="#FFFFFF" />}
+            style={styles.submitButton}
+          />
+        </TacticalCard>
+
+        {/* Registration Link */}
+        <View style={styles.registerPrompt}>
+          <Text style={styles.registerPromptText}>
+            ¿No tienes cuenta institucional?{' '}
+          </Text>
+          <TouchableOpacity onPress={onNavigateToRegister} activeOpacity={0.7}>
+            <Text style={styles.registerLink}>Regístrate aquí</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footerNote}>
-          Espacio seguro, confidencial y disponible
-        </Text>
+        {/* Confidentiality Banner */}
+        <ConfidentialityBanner
+          title="Secreto Profesional & Pastoral"
+          description="Canal cifrado de extremo a extremo y de estricta reserva pastoral, ética y confidencial para todo el personal."
+          style={styles.banner}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -142,115 +179,131 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
     paddingHorizontal: Theme.spacing.containerPadding,
-    paddingVertical: 32,
+    paddingTop: Platform.OS === 'ios' ? 24 : 16,
+    paddingBottom: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabletContainer: {
+    maxWidth: 440,
+    width: '100%',
+    alignSelf: 'center',
   },
   headerArea: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
+    width: '100%',
   },
   emblemWrapper: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Theme.colors.secondaryContainer,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: Theme.colors.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
   },
-  title: {
-    ...globalStyles.displayLg,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  titlePrefix: {
+    fontFamily: Theme.fonts.headline,
+    fontSize: 26,
+    color: Theme.colors.onSurface,
+  },
+  titleApp: {
+    fontFamily: Theme.fonts.headlineBold,
     fontSize: 32,
-    lineHeight: 38,
-    textAlign: 'center',
+    color: Theme.colors.tacticalNavy,
+    letterSpacing: -0.5,
+  },
+  titleSuffix: {
+    fontFamily: Theme.fonts.headline,
+    fontSize: 26,
+    color: Theme.colors.onSurface,
   },
   subtitle: {
     ...globalStyles.bodySm,
     color: Theme.colors.onSurfaceVariant,
-    marginTop: 4,
     textAlign: 'center',
+    marginTop: 4,
+    maxWidth: 320,
+    lineHeight: 18,
   },
-  card: {
-    backgroundColor: Theme.colors.surfaceContainerLowest,
-    borderRadius: Theme.roundness.xl,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#E7EEFF',
+  loginCard: {
+    width: '100%',
+    marginBottom: 16,
   },
   cardTitle: {
-    ...globalStyles.headlineMd,
+    fontFamily: Theme.fonts.headline,
     fontSize: 20,
     lineHeight: 26,
-    color: Theme.colors.primary,
+    color: Theme.colors.onSurface,
   },
   cardSubtitle: {
     ...globalStyles.bodySm,
+    color: Theme.colors.onSurfaceVariant,
     marginTop: 4,
-    marginBottom: 20,
+    marginBottom: 18,
+    lineHeight: 18,
   },
-  errorBanner: {
+  utilsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFEAEA',
-    borderRadius: Theme.roundness.lg,
-    padding: 12,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginVertical: 10,
+    flexWrap: 'wrap',
     gap: 8,
   },
-  errorText: {
-    ...globalStyles.bodySm,
-    color: Theme.colors.error,
-    flex: 1,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    ...globalStyles.labelCaps,
-    color: Theme.colors.primary,
-    marginBottom: 6,
-    fontSize: 11,
-  },
-  inputContainer: {
+  rememberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F6FA',
-    borderRadius: Theme.roundness.lg,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    height: 48,
   },
-  inputIcon: {
-    marginRight: 8,
-  },
-  input: {
-    flex: 1,
-    fontFamily: Theme.fonts.body,
-    fontSize: 15,
-    color: Theme.colors.onSurface,
-  },
-  loginButton: {
-    backgroundColor: Theme.colors.primary,
-    height: 50,
-    borderRadius: Theme.roundness.lg,
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    backgroundColor: Theme.colors.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 8,
+  },
+  checkboxActive: {
+    backgroundColor: Theme.colors.secondary,
+  },
+  rememberText: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    color: Theme.colors.onSurfaceVariant,
+  },
+  forgotText: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: Theme.colors.secondary,
+  },
+  submitButton: {
     marginTop: 12,
   },
-  loginButtonDisabled: {
-    opacity: 0.6,
+  registerPrompt: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
   },
-  loginButtonText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    color: Theme.colors.onPrimary,
-    fontSize: 16,
-  },
-  footerNote: {
+  registerPromptText: {
     ...globalStyles.bodySm,
-    textAlign: 'center',
-    marginTop: 24,
-    color: '#8A92A0',
+    color: Theme.colors.onSurfaceVariant,
+  },
+  registerLink: {
+    ...globalStyles.bodySm,
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: Theme.colors.secondary,
+    textDecorationLine: 'underline',
+  },
+  banner: {
+    marginTop: 12,
   },
 });

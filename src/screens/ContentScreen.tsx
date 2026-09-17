@@ -1,125 +1,370 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  useWindowDimensions,
+} from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
-import { Search, Play, BookOpen, ChevronRight } from 'lucide-react-native';
+import { FilterPills, TacticalButton } from '../components/common';
+import {
+  Search,
+  X,
+  Plus,
+  Tv,
+  Sparkles,
+  FileQuestion,
+  RefreshCw,
+} from 'lucide-react-native';
+import { useAuthStore } from '../lib/stores/auth';
+import {
+  fetchContents,
+  toggleContentLike,
+  deleteContent,
+} from '../lib/api/content';
+import {
+  ContentCard,
+  ContentDetailModal,
+  ContentFormModal,
+} from '../components/content';
+import type { ContentItem, ContentType } from '../types/api';
+
+const FILTER_CATEGORIES = [
+  { id: 'ALL', label: 'Todos' },
+  { id: 'SPOTIFY', label: 'Spotify / Audio' },
+  { id: 'YOUTUBE', label: 'YouTube Videos' },
+  { id: 'IMAGE', label: 'Imágenes' },
+  { id: 'VIDEO', label: 'Videos' },
+];
 
 export default function ContentScreen() {
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-      {/* Search Section */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchInputContainer}>
-          <Search size={20} color={Theme.colors.onSurfaceVariant} style={styles.searchIcon} />
-          <TextInput 
-            style={styles.searchInput}
-            placeholder="Buscar reflexiones, podcasts, sermones..."
-            placeholderTextColor={Theme.colors.onSurfaceVariant}
+  const { width } = useWindowDimensions();
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  const canManage =
+    user?.role === 'CHAPLAIN_CONTENT_LEADER' || user?.role === 'SUPERUSER';
+
+  const [contents, setContents] = useState<ContentItem[]>([]);
+  const [selectedType, setSelectedType] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Detail Modal
+  const [selectedDetail, setSelectedDetail] = useState<ContentItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Form Modal (Create / Edit)
+  const [editingContent, setEditingContent] = useState<ContentItem | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+
+  const loadContents = useCallback(
+    async (showLoader = true) => {
+      if (showLoader) setIsLoading(true);
+      try {
+        const typeParam = selectedType === 'ALL' ? undefined : (selectedType as ContentType);
+        const data = await fetchContents(typeParam);
+        setContents(data || []);
+      } catch (err: any) {
+        // Keep existing on network drop
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [selectedType]
+  );
+
+  useEffect(() => {
+    loadContents(true);
+  }, [loadContents]);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    loadContents(false);
+  }, [loadContents]);
+
+  // Client-side instantaneous title and description filter
+  const filteredContents = useMemo(() => {
+    if (!searchQuery.trim()) return contents;
+    const q = searchQuery.toLowerCase();
+    return contents.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q))
+    );
+  }, [contents, searchQuery]);
+
+  // Atomic like toggle with optimistic state update
+  const handleLikeToggle = useCallback(
+    async (id: number) => {
+      if (!isAuthenticated) {
+        Alert.alert(
+          'Iniciar Sesión Requerido',
+          'Para interactuar y dar Me Gusta a los contenidos, necesitás ingresar con tu cuenta.'
+        );
+        return;
+      }
+
+      setContents((prev) =>
+        prev.map((item) => {
+          if (item.id !== id) return item;
+          const currentLiked = !!item.isLikedByMe;
+          const nextLiked = !currentLiked;
+          const nextCount = Math.max(0, item.likesCount + (nextLiked ? 1 : -1));
+          return {
+            ...item,
+            isLikedByMe: nextLiked,
+            likesCount: nextCount,
+          };
+        })
+      );
+
+      try {
+        const res = await toggleContentLike(id);
+        setContents((prev) =>
+          prev.map((item) => {
+            if (item.id !== id) return item;
+            return {
+              ...item,
+              isLikedByMe: res.liked,
+              likesCount: res.likesCount,
+            };
+          })
+        );
+      } catch {
+        // Rollback on failure
+        loadContents(false);
+      }
+    },
+    [isAuthenticated, loadContents]
+  );
+
+  const handleOpenDetail = useCallback((item: ContentItem) => {
+    setSelectedDetail(item);
+    setIsDetailOpen(true);
+  }, []);
+
+  const handleOpenCreate = useCallback(() => {
+    setEditingContent(null);
+    setIsFormOpen(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((item: ContentItem) => {
+    setEditingContent(item);
+    setIsFormOpen(true);
+  }, []);
+
+  const handleDelete = useCallback(
+    (item: ContentItem) => {
+      Alert.alert(
+        '¿Eliminar Contenido?',
+        `Esta acción eliminará de forma permanente "${item.title}". No se puede deshacer.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Eliminar',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteContent(item.id);
+                setContents((prev) => prev.filter((c) => c.id !== item.id));
+              } catch (err: any) {
+                Alert.alert('Error', err.message || 'No se pudo eliminar el contenido.');
+              }
+            },
+          },
+        ]
+      );
+    },
+    []
+  );
+
+  const handleFormSuccess = useCallback((savedItem: ContentItem) => {
+    setContents((prev) => {
+      const exists = prev.some((c) => c.id === savedItem.id);
+      if (exists) {
+        return prev.map((c) => (c.id === savedItem.id ? savedItem : c));
+      }
+      return [savedItem, ...prev];
+    });
+  }, []);
+
+  const handleDetailLikeChanged = useCallback(
+    (id: number, newCount: number, liked: boolean) => {
+      setContents((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, likesCount: newCount, isLikedByMe: liked } : c))
+      );
+    },
+    []
+  );
+
+  const isTablet = width > 500;
+
+  const renderHeader = () => (
+    <View style={styles.headerBlock}>
+      {/* 1. Hero / Editorial Header */}
+      <View style={styles.heroCard}>
+        <View style={styles.heroBadgeRow}>
+          <Tv size={14} color={Theme.colors.primary} />
+          <Text style={styles.heroBadgeText}>PANEL EDITORIAL & MULTIMEDIA</Text>
+        </View>
+        <Text style={styles.heroTitle}>Contenido y Reflexión</Text>
+        <Text style={styles.heroSubtitle}>
+          Recursos de audio en Spotify, prédicas en video y mensajes de fe para acompañar a la comunidad.
+        </Text>
+
+        {canManage ? (
+          <View style={styles.heroActionRow}>
+            <TacticalButton
+              title="Publicar Contenido"
+              onPress={handleOpenCreate}
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus size={16} color="#FFFFFF" />}
+              style={styles.newContentBtn}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      {/* 2. Tactical Search Bar */}
+      <View style={styles.searchBar}>
+        <Search size={18} color={Theme.colors.onSurfaceVariant} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por título o reflexión pastoral..."
+          placeholderTextColor="#8A92A0"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery ? (
+          <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+            <X size={18} color={Theme.colors.onSurfaceVariant} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {/* 3. Filter Pills */}
+      <FilterPills
+        items={FILTER_CATEGORIES}
+        selectedId={selectedType}
+        onSelect={(id) => setSelectedType(id)}
+        style={styles.filterPills}
+      />
+    </View>
+  );
+
+  const renderEmpty = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={Theme.colors.primary} />
+          <Text style={styles.loadingText}>Cargando publicaciones...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyBox}>
+        <View style={styles.emptyIconCircle}>
+          <FileQuestion size={32} color={Theme.colors.secondary} />
+        </View>
+        <Text style={styles.emptyTitle}>No hay contenidos disponibles</Text>
+        <Text style={styles.emptySubtitle}>
+          {searchQuery
+            ? 'No encontramos publicaciones que coincidan con tu búsqueda.'
+            : 'Pronto compartiremos nuevos recursos en esta categoría.'}
+        </Text>
+        {canManage ? (
+          <TacticalButton
+            title="Crear Primera Publicación"
+            onPress={handleOpenCreate}
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus size={16} color="#FFFFFF" />}
+            style={{ marginTop: 14 }}
           />
-        </View>
+        ) : (
+          <TacticalButton
+            title="Reintentar Carga"
+            onPress={() => loadContents(true)}
+            variant="secondary"
+            size="sm"
+            leftIcon={<RefreshCw size={14} color={Theme.colors.secondary} />}
+            style={{ marginTop: 14 }}
+          />
+        )}
       </View>
+    );
+  };
 
-      {/* Featured Podcasts */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Podcasts Destacados</Text>
-          <TouchableOpacity>
-            <Text style={styles.viewAllText}>VER TODOS</Text>
-          </TouchableOpacity>
-        </View>
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={filteredContents}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={({ item }) => (
+          <ContentCard
+            content={item}
+            canManage={canManage}
+            onLikeToggle={handleLikeToggle}
+            onOpenDetail={handleOpenDetail}
+            onEdit={handleOpenEdit}
+            onDelete={handleDelete}
+          />
+        )}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={[
+          styles.listContent,
+          isTablet && styles.tabletContent,
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={Theme.colors.primary}
+            colors={[Theme.colors.primary]}
+          />
+        }
+        // Performance properties per vercel-react-native-skills
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={true}
+      />
 
-        <View style={styles.cardsGrid}>
-          {/* Podcast Card 1 */}
-          <View style={[styles.card, globalStyles.shadowSoft]}>
-            <View style={styles.cardImageContainer}>
-              <View style={[styles.cardImagePlaceholder, { backgroundColor: '#e2f0fd' }]} />
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>SERIE DE AUDIO</Text>
-              </View>
-            </View>
-            <View style={styles.cardContent}>
-              <View style={styles.cardMeta}>
-                <Text style={styles.cardMetaText}>12 Oct, 2023</Text>
-                <Text style={styles.cardMetaText}>45 min</Text>
-              </View>
-              <Text style={styles.cardTitle}>Encontrando Paz en el Caos</Text>
-              <Text style={styles.cardDescription} numberOfLines={2}>
-                Una reflexión guiada para atravesar tiempos turbulentos apoyándose en la fe.
-              </Text>
-              <TouchableOpacity style={styles.cardAction}>
-                <Play size={16} color={Theme.colors.secondary} style={styles.actionIcon} />
-                <Text style={styles.actionText}>ESCUCHAR AHORA</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+      {/* Content Detail Modal */}
+      <ContentDetailModal
+        visible={isDetailOpen}
+        content={selectedDetail}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setSelectedDetail(null);
+        }}
+        onLikeChanged={handleDetailLikeChanged}
+      />
 
-          {/* Podcast Card 2 */}
-          <View style={[styles.card, globalStyles.shadowSoft]}>
-            <View style={styles.cardImageContainer}>
-              <View style={[styles.cardImagePlaceholder, { backgroundColor: '#e6fffa' }]} />
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>ENTREVISTA</Text>
-              </View>
-            </View>
-            <View style={styles.cardContent}>
-              <View style={styles.cardMeta}>
-                <Text style={styles.cardMetaText}>05 Oct, 2023</Text>
-                <Text style={styles.cardMetaText}>38 min</Text>
-              </View>
-              <Text style={styles.cardTitle}>Las Raíces de la Alegría</Text>
-              <Text style={styles.cardDescription} numberOfLines={2}>
-                Conversaciones con capellanes sobre cómo cultivar paz sostenible día a día.
-              </Text>
-              <TouchableOpacity style={styles.cardAction}>
-                <Play size={16} color={Theme.colors.secondary} style={styles.actionIcon} />
-                <Text style={styles.actionText}>ESCUCHAR AHORA</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Recent Sermons */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Reflexiones Recientes</Text>
-          <TouchableOpacity>
-            <Text style={styles.viewAllText}>VER TODAS</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.listContainer}>
-          {/* Sermon Item 1 */}
-          <TouchableOpacity style={styles.listItem}>
-            <View style={styles.listIconContainer}>
-              <BookOpen size={24} color={Theme.colors.primary} />
-            </View>
-            <View style={styles.listItemContent}>
-              <Text style={styles.listItemTitle}>Caminando por el Valle</Text>
-              <Text style={styles.listItemSubtitle}>Capellanía • Basado en Salmos 23</Text>
-            </View>
-            <View style={styles.listItemMeta}>
-              <Text style={styles.listItemDate}>15 Oct</Text>
-              <ChevronRight size={20} color={Theme.colors.outline} />
-            </View>
-          </TouchableOpacity>
-
-          {/* Sermon Item 2 */}
-          <TouchableOpacity style={styles.listItem}>
-            <View style={styles.listIconContainer}>
-              <BookOpen size={24} color={Theme.colors.primary} />
-            </View>
-            <View style={styles.listItemContent}>
-              <Text style={styles.listItemTitle}>Gracia en lo Cotidiano</Text>
-              <Text style={styles.listItemSubtitle}>Capellanía • Acompañamiento diario</Text>
-            </View>
-            <View style={styles.listItemMeta}>
-              <Text style={styles.listItemDate}>08 Oct</Text>
-              <ChevronRight size={20} color={Theme.colors.outline} />
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </ScrollView>
+      {/* Content Create / Edit Modal */}
+      <ContentFormModal
+        visible={isFormOpen}
+        initialContent={editingContent}
+        onClose={() => {
+          setIsFormOpen(false);
+          setEditingContent(null);
+        }}
+        onSuccess={handleFormSuccess}
+      />
+    </View>
   );
 }
 
@@ -128,159 +373,125 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.colors.background,
   },
-  contentContainer: {
+  listContent: {
     paddingHorizontal: Theme.spacing.containerPadding,
-    paddingTop: Theme.spacing.stackMd,
-    paddingBottom: 120,
+    paddingTop: 12,
+    paddingBottom: 110,
   },
-  searchSection: {
-    marginBottom: Theme.spacing.stackLg,
+  tabletContent: {
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
   },
-  searchInputContainer: {
+  headerBlock: {
+    marginBottom: 10,
+  },
+  heroCard: {
+    backgroundColor: Theme.colors.surfaceContainerLowest,
+    borderRadius: Theme.roundness.xl,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E8ECF2',
+    ...globalStyles.shadowSm,
+  },
+  heroBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  heroBadgeText: {
+    ...globalStyles.labelCaps,
+    fontSize: 9,
+    color: Theme.colors.primary,
+  },
+  heroTitle: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 20,
+    color: Theme.colors.onSurface,
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.colors.onSurfaceVariant,
+  },
+  heroActionRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+  },
+  newContentBtn: {
+    alignSelf: 'flex-start',
+  },
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Theme.colors.surfaceContainerLowest,
+    borderRadius: Theme.roundness.lg,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E7EEFF',
-    borderRadius: 9999,
-    paddingHorizontal: 16,
-    height: 52,
+    borderColor: '#E2E8F0',
+    ...globalStyles.shadowSm,
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
     fontFamily: Theme.fonts.body,
-    fontSize: 16,
+    fontSize: 13,
     color: Theme.colors.onSurface,
   },
-  section: {
-    marginBottom: Theme.spacing.sectionGap,
+  filterPills: {
+    paddingBottom: 6,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Theme.spacing.stackMd,
-  },
-  sectionTitle: {
-    ...globalStyles.headlineLgMobile,
-    color: Theme.colors.primary,
-  },
-  viewAllText: {
-    ...globalStyles.labelCaps,
-    color: Theme.colors.secondary,
-  },
-  cardsGrid: {
-    gap: Theme.spacing.gutter,
-  },
-  card: {
-    backgroundColor: Theme.colors.surfaceContainerLowest,
-    borderRadius: Theme.roundness.xl,
-    borderWidth: 1,
-    borderColor: '#E7EEFF',
-    overflow: 'hidden',
-  },
-  cardImageContainer: {
-    height: 180,
-    width: '100%',
-    position: 'relative',
-  },
-  cardImagePlaceholder: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.6,
-  },
-  badgeContainer: {
-    position: 'absolute',
-    bottom: Theme.spacing.stackSm,
-    left: Theme.spacing.stackSm,
-    backgroundColor: Theme.colors.surface,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 9999,
-  },
-  badgeText: {
-    ...globalStyles.labelCaps,
-    fontSize: 10,
-    color: Theme.colors.primary,
-  },
-  cardContent: {
-    padding: Theme.spacing.stackMd,
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  cardMetaText: {
-    ...globalStyles.bodySm,
-    color: Theme.colors.onSurfaceVariant,
-  },
-  cardTitle: {
-    fontFamily: Theme.fonts.headline,
-    fontSize: 20,
-    lineHeight: 28,
-    color: Theme.colors.onSurface,
-    marginBottom: 6,
-  },
-  cardDescription: {
-    ...globalStyles.bodyMd,
-    color: Theme.colors.onSurfaceVariant,
-    marginBottom: Theme.spacing.stackMd,
-  },
-  cardAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionIcon: {
-    marginRight: 6,
-  },
-  actionText: {
-    ...globalStyles.labelCaps,
-    color: Theme.colors.secondary,
-  },
-  listContainer: {
-    backgroundColor: Theme.colors.surfaceContainerLowest,
-    borderRadius: Theme.roundness.xl,
-    borderWidth: 1,
-    borderColor: '#E7EEFF',
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Theme.spacing.stackMd,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E7EEFF',
-  },
-  listIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E7EEFF',
+  loadingBox: {
+    paddingVertical: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    gap: 12,
   },
-  listItemContent: {
-    flex: 1,
+  loadingText: {
+    ...globalStyles.bodySm,
+    color: Theme.colors.onSurfaceVariant,
+    fontSize: 13,
   },
-  listItemTitle: {
+  emptyBox: {
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.colors.surfaceContainerLowest,
+    borderRadius: Theme.roundness.xl,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 10,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: {
     fontFamily: Theme.fonts.headline,
     fontSize: 16,
     color: Theme.colors.onSurface,
+    marginBottom: 4,
   },
-  listItemSubtitle: {
+  emptySubtitle: {
     ...globalStyles.bodySm,
+    fontSize: 12,
     color: Theme.colors.onSurfaceVariant,
-  },
-  listItemMeta: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  listItemDate: {
-    ...globalStyles.bodySm,
-    color: Theme.colors.onSurfaceVariant,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 280,
   },
 });

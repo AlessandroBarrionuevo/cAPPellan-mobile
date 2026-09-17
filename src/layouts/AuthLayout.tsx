@@ -1,18 +1,21 @@
 import React from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Theme } from '../theme/Theme';
+import { useAppInsets } from '../lib/safeArea';
 
 interface AuthLayoutProps {
   children: React.ReactNode;
 }
 
 export function AuthLayout({ children }: AuthLayoutProps) {
+  const insets = useAppInsets();
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar style="dark" />
       {children}
-    </SafeAreaView>
+    </View>
   );
 }
 

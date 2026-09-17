@@ -4,10 +4,15 @@
     "slug": "capellanes-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "capellanes-app",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "CapellanAPP necesita acceso a la cámara para las sesiones de videollamada de acompañamiento espiritual.",
+        "NSMicrophoneUsageDescription": "CapellanAPP necesita acceso al micrófono para las llamadas de acompañamiento pastoral."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,13 +22,22 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.tmpexpoproject"
+      "package": "com.anonymous.tmpexpoproject",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      "@livekit/react-native-expo-plugin"
     ],
     "owner": "alessandrobarrionuevos-team",
     "extra": {

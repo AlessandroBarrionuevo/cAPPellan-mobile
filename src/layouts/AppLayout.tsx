@@ -1,11 +1,23 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Theme, globalStyles } from '../theme/Theme';
+import { Theme } from '../theme/Theme';
 import { AuthUser } from '../types/api';
-import { Home, BookOpen, Layers, LogOut } from 'lucide-react-native';
+import { VigilHeader, BottomNavBar, NavTab } from '../components/common';
+import { useAppInsets } from '../lib/safeArea';
 
-export type AppTab = 'home' | 'content' | 'lectura';
+export type AppTab =
+  | 'guardia'
+  | 'chat'
+  | 'informes'
+  | 'home'
+  | 'biblia'
+  | 'mas'
+  | 'perfil'
+  | 'content'
+  | 'oraciones'
+  | 'blogs'
+  | 'lectura';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -13,6 +25,7 @@ interface AppLayoutProps {
   onTabChange: (tab: AppTab) => void;
   user: AuthUser;
   onLogout: () => void;
+  isChatUnlocked?: boolean;
   showHeader?: boolean;
   showBottomNav?: boolean;
 }
@@ -23,134 +36,153 @@ export function AppLayout({
   onTabChange,
   user,
   onLogout,
+  isChatUnlocked = false,
   showHeader = true,
   showBottomNav = true,
 }: AppLayoutProps) {
+  const insets = useAppInsets();
+
+  const isChaplainRole = user.role === 'CHAPLAIN' || user.role === 'CHAPLAIN_LEADER';
+
+  // Map sub-tabs and role views to the active bottom nav item
+  const getNavTab = (): NavTab => {
+    if (user.role === 'CHAPLAIN_CONTENT_LEADER') {
+      switch (activeTab) {
+        case 'guardia':
+          return 'guardia';
+        case 'chat':
+          return 'chat';
+        case 'informes':
+          return 'informes';
+        case 'perfil':
+          return 'perfil';
+        case 'content':
+        default:
+          return 'content';
+      }
+    }
+
+    if (isChaplainRole) {
+      switch (activeTab) {
+        case 'chat':
+          return 'chat';
+        case 'informes':
+          return 'informes';
+        case 'perfil':
+          return 'perfil';
+        case 'guardia':
+        case 'home':
+        default:
+          return 'guardia';
+      }
+    }
+
+    if (user.role === 'SUPERUSER') {
+      switch (activeTab) {
+        case 'chat':
+          return 'chat';
+        case 'informes':
+          return 'informes';
+        case 'perfil':
+          return 'perfil';
+        case 'home':
+        default:
+          return 'home';
+      }
+    }
+
+    // Default for BASIC role
+    switch (activeTab) {
+      case 'biblia':
+      case 'lectura':
+        return 'biblia';
+      case 'mas':
+      case 'content':
+      case 'oraciones':
+      case 'blogs':
+        return 'mas';
+      case 'perfil':
+        return 'perfil';
+      case 'home':
+      default:
+        return 'home';
+    }
+  };
+
+  const getSectionBadge = (): string => {
+    switch (activeTab) {
+      case 'guardia':
+        return 'Guardia';
+      case 'chat':
+        return 'Chat 1:1';
+      case 'informes':
+        return 'Informes';
+      case 'biblia':
+      case 'lectura':
+        return 'Biblia';
+      case 'mas':
+        return 'Comunidad';
+      case 'content':
+        return 'Contenido';
+      case 'oraciones':
+        return 'Muro de Oración';
+      case 'blogs':
+        return 'Crónicas & Blogs';
+      case 'perfil':
+        return 'Perfil';
+      case 'home':
+      default:
+        return 'Inicio';
+    }
+  };
+
+  const isSubScreen =
+    (activeTab === 'content' || activeTab === 'oraciones' || activeTab === 'blogs') &&
+    user.role !== 'CHAPLAIN_CONTENT_LEADER';
+
+  // Determine if top header should display
+  // Screens with dedicated top headers (Guardia, Chat, Informes, Perfil) do not need outer VigilHeader
+  const shouldRenderHeader =
+    showHeader &&
+    activeTab !== 'guardia' &&
+    activeTab !== 'chat' &&
+    activeTab !== 'informes' &&
+    activeTab !== 'perfil' &&
+    activeTab !== 'lectura' &&
+    activeTab !== 'biblia';
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
 
-      {/* Top Header AppBar */}
-      {showHeader && (
-        <View style={styles.header}>
-          <View style={styles.headerTitleGroup}>
-            <Text style={styles.headerTitle}>CapellanAPP</Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>{user.role}</Text>
-            </View>
-          </View>
-
-          <View style={styles.headerRight}>
-            <Text style={styles.usernameText}>{user.username}</Text>
-            <TouchableOpacity
-              style={styles.headerIconButton}
-              onPress={onLogout}
-              activeOpacity={0.8}
-            >
-              <LogOut size={20} color={Theme.colors.error} />
-            </TouchableOpacity>
-          </View>
-        </View>
+      {/* Optional Top Header for secondary screens */}
+      {shouldRenderHeader && (
+        <VigilHeader
+          title={activeTab === 'oraciones' || activeTab === 'mas' || activeTab === 'blogs' ? 'cAPPellan' : 'Vigil & Grace'}
+          subtitle="Servicio de Capellanía"
+          sectionBadge={getSectionBadge()}
+          showBack={isSubScreen}
+          onBack={
+            isSubScreen
+              ? () => onTabChange(isChaplainRole ? 'guardia' : 'mas')
+              : undefined
+          }
+        />
       )}
 
       {/* Main Screen Content */}
       <View style={styles.mainContent}>{children}</View>
 
-      {/* Bottom Navigation Bar */}
+      {/* Role-Specific Bottom Navigation Bar */}
       {showBottomNav && (
-        <View style={styles.bottomNav}>
-          {/* Tab 1: Home */}
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'home' && styles.tabButtonActive]}
-            onPress={() => onTabChange('home')}
-            activeOpacity={0.8}
-          >
-            <Home
-              size={20}
-              color={
-                activeTab === 'home'
-                  ? Theme.colors.onSecondaryContainer
-                  : Theme.colors.onSurfaceVariant
-              }
-              strokeWidth={activeTab === 'home' ? 2.5 : 2}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                {
-                  color:
-                    activeTab === 'home'
-                      ? Theme.colors.onSecondaryContainer
-                      : Theme.colors.onSurfaceVariant,
-                },
-              ]}
-            >
-              Inicio
-            </Text>
-          </TouchableOpacity>
-
-          {/* Tab 2: Content */}
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'content' && styles.tabButtonActive]}
-            onPress={() => onTabChange('content')}
-            activeOpacity={0.8}
-          >
-            <Layers
-              size={20}
-              color={
-                activeTab === 'content'
-                  ? Theme.colors.onSecondaryContainer
-                  : Theme.colors.onSurfaceVariant
-              }
-              strokeWidth={activeTab === 'content' ? 2.5 : 2}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                {
-                  color:
-                    activeTab === 'content'
-                      ? Theme.colors.onSecondaryContainer
-                      : Theme.colors.onSurfaceVariant,
-                },
-              ]}
-            >
-              Contenido
-            </Text>
-          </TouchableOpacity>
-
-          {/* Tab 3: Lectura */}
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'lectura' && styles.tabButtonActive]}
-            onPress={() => onTabChange('lectura')}
-            activeOpacity={0.8}
-          >
-            <BookOpen
-              size={20}
-              color={
-                activeTab === 'lectura'
-                  ? Theme.colors.onSecondaryContainer
-                  : Theme.colors.onSurfaceVariant
-              }
-              strokeWidth={activeTab === 'lectura' ? 2.5 : 2}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                {
-                  color:
-                    activeTab === 'lectura'
-                      ? Theme.colors.onSecondaryContainer
-                      : Theme.colors.onSurfaceVariant,
-                },
-              ]}
-            >
-              Lectura
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <BottomNavBar
+          activeTab={getNavTab()}
+          onTabChange={(tab) => onTabChange(tab as AppTab)}
+          userRole={user.role}
+          isChatUnlocked={isChatUnlocked}
+        />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -159,84 +191,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.colors.background,
   },
-  header: {
-    height: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Theme.spacing.containerPadding,
-    backgroundColor: Theme.colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F4F8',
-  },
-  headerTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerTitle: {
-    ...globalStyles.headlineMd,
-    fontSize: 20,
-    fontWeight: '700',
-    color: Theme.colors.primary,
-  },
-  roleBadge: {
-    backgroundColor: Theme.colors.secondaryContainer,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Theme.roundness.sm,
-  },
-  roleBadgeText: {
-    ...globalStyles.labelCaps,
-    color: Theme.colors.onSecondaryContainer,
-    fontSize: 10,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  usernameText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 14,
-    color: Theme.colors.primary,
-  },
-  headerIconButton: {
-    padding: 6,
-    borderRadius: Theme.roundness.full,
-    backgroundColor: '#FCE8E6',
-  },
   mainContent: {
     flex: 1,
   },
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 76,
-    backgroundColor: Theme.colors.background,
-    borderTopWidth: 1,
-    borderTopColor: '#E7EEFF',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: 16,
-  },
-  tabButton: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 20,
-    borderRadius: Theme.roundness.full,
-  },
-  tabButtonActive: {
-    backgroundColor: Theme.colors.secondaryContainer,
-  },
-  tabText: {
-    ...globalStyles.labelCaps,
-    marginTop: 4,
-    fontSize: 10,
-  },
 });
+
+export default AppLayout;
