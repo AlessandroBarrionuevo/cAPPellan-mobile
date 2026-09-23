@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ScrollView,
   Alert,
   useWindowDimensions,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { useAuthStore } from '../../lib/stores/auth';
@@ -26,8 +28,21 @@ import {
   ChevronRight,
   Gavel,
   CheckCircle2,
+  User,
+  MapPin,
+  Phone,
+  EyeOff,
+  Eye,
+  Award,
+  Save,
 } from 'lucide-react-native';
-import type { AuthUser } from '../../types/api';
+import {
+  getMyBasicProfile,
+  updateMyBasicProfile,
+  getChaplainProfile,
+  updateChaplainProfile,
+} from '../../lib/api/profiles';
+import type { AuthUser, BasicProfile, ChaplainProfile } from '../../types/api';
 
 export interface ReservedProfileViewProps {
   user?: AuthUser | null;
@@ -48,6 +63,116 @@ export default function ReservedProfileView({
   // Preferences toggles
   const [autoPurge, setAutoPurge] = useState(true);
   const [silentNotifs, setSilentNotifs] = useState(true);
+
+  // Profile data from backend (Section 7.4 & 7.2)
+  const [basicProfile, setBasicProfile] = useState<BasicProfile | null>(null);
+  const [chaplainProfile, setChaplainProfile] = useState<ChaplainProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Form fields
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
+
+  // Chaplain specific fields
+  const [militaryRank, setMilitaryRank] = useState('');
+  const [militaryForce, setMilitaryForce] = useState('');
+  const [yearsOfService, setYearsOfService] = useState('');
+  const [bio, setBio] = useState('');
+
+  const isChaplain =
+    user?.role === 'CHAPLAIN' ||
+    user?.role === 'CHAPLAIN_LEADER' ||
+    user?.role === 'CHAPLAIN_CONTENT_LEADER';
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!user) return;
+    setIsLoadingProfile(true);
+
+    if (isChaplain && user.userId) {
+      getChaplainProfile(user.userId)
+        .then((data) => {
+          if (!isMounted || !data) return;
+          setChaplainProfile(data);
+          setFullName(data.fullName || '');
+          setMilitaryRank(data.militaryRank || '');
+          setMilitaryForce(data.militaryForce || '');
+          setYearsOfService(data.yearsOfService ? String(data.yearsOfService) : '');
+          setBio(data.bio || '');
+        })
+        .catch(() => {
+          // Fallback
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingProfile(false);
+        });
+    } else {
+      getMyBasicProfile()
+        .then((data) => {
+          if (!isMounted || !data) return;
+          setBasicProfile(data);
+          setFullName(data.fullName || '');
+          setPhone(data.phone || '');
+          setLocation(data.location || '');
+          setIsAnonymous(Boolean(data.isAnonymous));
+        })
+        .catch(() => {
+          // Fallback
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingProfile(false);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, isChaplain]);
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    try {
+      if (isChaplain) {
+        const updated = await updateChaplainProfile({
+          fullName: fullName.trim() || undefined,
+          militaryForce: militaryForce.trim() || undefined,
+          militaryRank: militaryRank.trim() || undefined,
+          yearsOfService: yearsOfService ? parseInt(yearsOfService, 10) : undefined,
+          bio: bio.trim() || undefined,
+        });
+        setChaplainProfile(updated);
+        Alert.alert('Perfil Actualizado', 'Tus datos de servicio ministerial han sido guardados.');
+      } else {
+        const updated = await updateMyBasicProfile({
+          fullName: fullName.trim() || undefined,
+          phone: phone.trim() || undefined,
+          location: location.trim() || undefined,
+          isAnonymous,
+        });
+        setBasicProfile(updated);
+        Alert.alert('Ficha Guardada', 'Tus datos confidenciales han sido actualizados con éxito.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'No se pudieron guardar los cambios.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleAnonymity = async () => {
+    const nextVal = !isAnonymous;
+    setIsAnonymous(nextVal);
+    if (!isChaplain) {
+      try {
+        await updateMyBasicProfile({ isAnonymous: nextVal });
+      } catch (e) {
+        // Ignored
+      }
+    }
+  };
 
   const handleLogoutPress = () => {
     Alert.alert(
@@ -97,7 +222,7 @@ export default function ReservedProfileView({
           <View style={styles.identityInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.userName} numberOfLines={1}>
-                {user?.username || 'Operativo Alfa-7'}
+                {fullName || user?.username || 'Operativo Alfa-7'}
               </Text>
               <ShieldCheck size={17} color={Theme.colors.secondary} />
             </View>
@@ -107,14 +232,181 @@ export default function ReservedProfileView({
             </Text>
 
             <View style={styles.stealthPill}>
-              <View style={styles.stealthDot} />
-              <Text style={styles.stealthPillText}>MODO DISCRETO ACTIVO</Text>
+              <View style={[styles.stealthDot, isAnonymous && { backgroundColor: '#F59E0B' }]} />
+              <Text style={styles.stealthPillText}>
+                {isAnonymous ? 'MODO ANÓNIMO ACTIVADO' : 'IDENTIDAD VISIBLE'}
+              </Text>
             </View>
           </View>
         </View>
       </TacticalCard>
 
-      {/* 2. Confidentiality Legal & Pastoral Guarantee */}
+      {/* 2. Personal Profile Data & Privacy Settings (Section 7.4 & 7.5) */}
+      <View style={styles.prefsHeader}>
+        <Text style={styles.prefsTitle}>
+          {isChaplain ? 'DATOS DE SERVICIO MINISTERIAL' : 'FICHA PERSONAL & ANONIMATO'}
+        </Text>
+        {isLoadingProfile && <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />}
+      </View>
+
+      <TacticalCard style={styles.profileEditCard} padding={16}>
+        {/* Full Name */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>NOMBRE COMPLETO</Text>
+          <View style={styles.inputWrapper}>
+            <User size={16} color={Theme.colors.onSurfaceVariant} />
+            <TextInput
+              style={styles.textInput}
+              value={fullName}
+              onChangeText={setFullName}
+              placeholder="Ej. Lucas Gómez"
+              placeholderTextColor={Theme.colors.onSurfaceVariant}
+            />
+          </View>
+        </View>
+
+        {!isChaplain ? (
+          <>
+            {/* Phone */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>TELÉFONO DE CONTACTO</Text>
+              <View style={styles.inputWrapper}>
+                <Phone size={16} color={Theme.colors.onSurfaceVariant} />
+                <TextInput
+                  style={styles.textInput}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="+54 9 11 2233-4455"
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+
+            {/* Location / Base */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>DESTINO / BASE / PROVINCIA</Text>
+              <View style={styles.inputWrapper}>
+                <MapPin size={16} color={Theme.colors.onSurfaceVariant} />
+                <TextInput
+                  style={styles.textInput}
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="Ej. Córdoba, Argentina"
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                />
+              </View>
+            </View>
+
+            {/* Anonymity Switch Row (Section 7.5) */}
+            <TouchableOpacity
+              style={styles.anonymityToggleRow}
+              onPress={handleToggleAnonymity}
+              activeOpacity={0.8}
+            >
+              <View style={styles.anonymityTextCol}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {isAnonymous ? (
+                    <EyeOff size={16} color={Theme.colors.secondary} />
+                  ) : (
+                    <Eye size={16} color={Theme.colors.secondary} />
+                  )}
+                  <Text style={styles.anonymityTitle}>Reserva de Identidad (Anonimato)</Text>
+                </View>
+                <Text style={styles.anonymityDesc}>
+                  Ocultar nombre y unidad en sesiones y oraciones
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.switchTrack,
+                  isAnonymous ? styles.switchOn : styles.switchOff,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.switchKnob,
+                    isAnonymous ? styles.knobOn : styles.knobOff,
+                  ]}
+                />
+              </View>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* Chaplain Specific Fields (Section 7.3) */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>FUERZA MILITAR / DE SEGURIDAD</Text>
+              <View style={styles.inputWrapper}>
+                <Award size={16} color={Theme.colors.onSurfaceVariant} />
+                <TextInput
+                  style={styles.textInput}
+                  value={militaryForce}
+                  onChangeText={setMilitaryForce}
+                  placeholder="GENDARMERIA, EJERCITO, etc."
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>RANGO O JERARQUÍA</Text>
+              <View style={styles.inputWrapper}>
+                <ShieldCheck size={16} color={Theme.colors.onSurfaceVariant} />
+                <TextInput
+                  style={styles.textInput}
+                  value={militaryRank}
+                  onChangeText={setMilitaryRank}
+                  placeholder="Comandante Principal, Mayor..."
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>AÑOS DE SERVICIO EN LA FUERZA</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.textInput}
+                  value={yearsOfService}
+                  onChangeText={setYearsOfService}
+                  placeholder="16"
+                  keyboardType="numeric"
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                />
+              </View>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>RESEÑA PASTORAL Y ESPECIALIDAD</Text>
+              <View style={[styles.inputWrapper, { height: 70, alignItems: 'flex-start' }]}>
+                <TextInput
+                  style={[styles.textInput, { height: 60, textAlignVertical: 'top' }]}
+                  value={bio}
+                  onChangeText={setBio}
+                  placeholder="Acompañamiento en crisis, frontera y estrés post-traumático..."
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                  multiline
+                />
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* Save Button */}
+        <TacticalButton
+          title={isSaving ? 'Guardando...' : 'Guardar Cambios'}
+          onPress={handleSaveProfile}
+          loading={isSaving}
+          variant="primary"
+          size="md"
+          leftIcon={<Save size={16} color="#FFFFFF" />}
+          style={{ marginTop: 14 }}
+        />
+      </TacticalCard>
+
+      {/* 3. Confidentiality Legal & Pastoral Guarantee */}
       <TacticalCard style={styles.guaranteeCard} variant="low" padding={16}>
         <View style={styles.guaranteeHeader}>
           <View style={styles.guaranteeIconWrapper}>
@@ -133,7 +425,7 @@ export default function ReservedProfileView({
         </View>
       </TacticalCard>
 
-      {/* 3. Tactical Preferences Section */}
+      {/* 4. Tactical Preferences Section */}
       <View style={styles.prefsHeader}>
         <Text style={styles.prefsTitle}>PROTOCOLOS DE PRIVACIDAD</Text>
         <Text style={styles.prefsCount}>4 CONTROLES ACTIVOS</Text>
@@ -231,7 +523,7 @@ export default function ReservedProfileView({
         </TouchableOpacity>
       </TacticalCard>
 
-      {/* 4. Quick Logout / Cierre Inmediato Seguro */}
+      {/* 5. Quick Logout / Cierre Inmediato Seguro */}
       <TacticalButton
         title="Cierre Inmediato Seguro"
         onPress={handleLogoutPress}
@@ -299,12 +591,12 @@ const styles = StyleSheet.create({
   },
   identityInfo: {
     flex: 1,
-    minWidth: 0,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 4,
   },
   userName: {
     fontFamily: Theme.fonts.headline,
@@ -315,7 +607,7 @@ const styles = StyleSheet.create({
     ...globalStyles.bodySm,
     fontSize: 12,
     color: Theme.colors.onSurfaceVariant,
-    marginTop: 2,
+    marginBottom: 8,
   },
   stealthPill: {
     flexDirection: 'row',
@@ -323,21 +615,72 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.surfaceContainer,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
-    marginTop: 6,
+    borderRadius: Theme.roundness.full,
     alignSelf: 'flex-start',
-    gap: 5,
+    gap: 6,
   },
   stealthDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: Theme.colors.secondary,
   },
   stealthPillText: {
     ...globalStyles.labelCaps,
-    fontSize: 8,
+    fontSize: 9,
+    color: Theme.colors.onSurface,
+    letterSpacing: 0.6,
+  },
+  profileEditCard: {
+    marginBottom: 16,
+    gap: 10,
+  },
+  fieldGroup: {
+    gap: 4,
+  },
+  fieldLabel: {
+    ...globalStyles.labelCaps,
+    fontSize: 9,
     color: Theme.colors.secondary,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.roundness.md,
+    paddingHorizontal: 10,
+    height: 40,
+    gap: 8,
+  },
+  textInput: {
+    flex: 1,
+    fontFamily: Theme.fonts.body,
+    fontSize: 13,
+    color: Theme.colors.onSurface,
+  },
+  anonymityToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    padding: 12,
+    borderRadius: Theme.roundness.md,
+    marginTop: 4,
+  },
+  anonymityTextCol: {
+    flex: 1,
+    paddingRight: 8,
+    gap: 2,
+  },
+  anonymityTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: Theme.colors.onSurface,
+  },
+  anonymityDesc: {
+    ...globalStyles.bodySm,
+    fontSize: 10,
+    color: Theme.colors.onSurfaceVariant,
   },
   guaranteeCard: {
     marginBottom: 16,
@@ -345,39 +688,41 @@ const styles = StyleSheet.create({
   guaranteeHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 10,
   },
   guaranteeIconWrapper: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: Theme.roundness.sm,
-    backgroundColor: Theme.colors.surfaceContainerHigh,
+    backgroundColor: Theme.colors.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
   guaranteeTextCol: {
     flex: 1,
   },
   guaranteeTitle: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 13,
+    fontFamily: Theme.fonts.headline,
+    fontSize: 14,
     color: Theme.colors.onSurface,
+    marginBottom: 4,
   },
   guaranteeDesc: {
     ...globalStyles.bodySm,
     fontSize: 11,
     lineHeight: 16,
     color: Theme.colors.onSurfaceVariant,
-    marginTop: 3,
   },
   guaranteeFooter: {
-    alignItems: 'flex-end',
-    marginTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 8,
   },
   guaranteeStatute: {
     ...globalStyles.labelCaps,
-    color: Theme.colors.secondary,
     fontSize: 9,
+    color: Theme.colors.secondary,
   },
   prefsHeader: {
     flexDirection: 'row',
@@ -388,17 +733,17 @@ const styles = StyleSheet.create({
   },
   prefsTitle: {
     ...globalStyles.labelCaps,
-    color: Theme.colors.secondary,
     fontSize: 10,
-    letterSpacing: 0.8,
+    color: Theme.colors.secondary,
   },
   prefsCount: {
     ...globalStyles.labelCaps,
+    fontSize: 10,
     color: Theme.colors.onSurfaceVariant,
-    fontSize: 9,
   },
   prefsCard: {
     marginBottom: 20,
+    overflow: 'hidden',
   },
   prefItem: {
     flexDirection: 'row',
@@ -410,13 +755,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    paddingRight: 8,
+    paddingRight: 10,
   },
   prefIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: Theme.roundness.md,
-    backgroundColor: Theme.colors.surfaceContainer,
+    width: 34,
+    height: 34,
+    borderRadius: Theme.roundness.sm,
+    backgroundColor: Theme.colors.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -433,15 +778,15 @@ const styles = StyleSheet.create({
     ...globalStyles.bodySm,
     fontSize: 11,
     color: Theme.colors.onSurfaceVariant,
-    marginTop: 1,
+    marginTop: 2,
   },
   prefBadgeActive: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Theme.colors.surfaceContainerLow,
+    backgroundColor: Theme.colors.surfaceContainer,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Theme.roundness.sm,
+    paddingVertical: 4,
+    borderRadius: Theme.roundness.full,
   },
   prefBadgeActiveText: {
     ...globalStyles.labelCaps,
@@ -451,7 +796,7 @@ const styles = StyleSheet.create({
   prefDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#F0F2F5',
-    marginLeft: 62,
+    marginLeft: 60,
   },
   switchTrack: {
     width: 44,
@@ -471,6 +816,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
+    ...globalStyles.shadowSm,
   },
   knobOn: {
     alignSelf: 'flex-end',
@@ -479,6 +825,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   logoutButton: {
-    marginTop: 4,
+    marginTop: 8,
   },
 });

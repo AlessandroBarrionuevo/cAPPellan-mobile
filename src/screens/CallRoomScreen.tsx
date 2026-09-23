@@ -21,6 +21,8 @@ import { ENDPOINTS } from '../lib/api/endpoints';
 import { ENV } from '../config/env';
 import { requestMediaPermissions } from '../lib/permissions';
 import { InstitutionalEmblem } from '../components/common';
+import { decodeRoomToken } from '../lib/jwt';
+import { CloudflareCallRoom } from '../modules/cloudflare-calls';
 import {
   LiveKitRoom,
   VideoTrack,
@@ -588,6 +590,21 @@ export default function CallRoomScreen({ onCallEnded }: CallRoomScreenProps) {
     };
   }, [initRoom]);
 
+  const user = useAuthStore((state) => state.user);
+  const currentSession = useCallStore((state) => state.currentSession);
+  const assignedCall = useChaplainStore((state) => state.assignedCall);
+
+  const isChaplainRole =
+    user?.role === 'CHAPLAIN' ||
+    user?.role === 'CHAPLAIN_LEADER' ||
+    user?.role === 'SUPERUSER';
+
+  const decodedToken = useMemo(() => {
+    return token ? decodeRoomToken(token) : null;
+  }, [token]);
+
+  const provider = decodedToken?.provider || 'livekit';
+
   const handleLiveKitError = useCallback((err: Error) => {
     console.warn('[CallRoom] LiveKit Error:', err);
   }, []);
@@ -614,7 +631,9 @@ export default function CallRoomScreen({ onCallEnded }: CallRoomScreenProps) {
       >
         <ActivityIndicator size="large" color="#6EE7B7" />
         <Text style={styles.loadingTitle}>Estableciendo enlace pastoral...</Text>
-        <Text style={styles.loadingSub}>Verificando túnel cifrado y conectando con LiveKit</Text>
+        <Text style={styles.loadingSub}>
+          Verificando túnel cifrado y conectando con {provider === 'cloudflare' ? 'Cloudflare Calls' : 'LiveKit'}
+        </Text>
       </View>
     );
   }
@@ -644,6 +663,56 @@ export default function CallRoomScreen({ onCallEnded }: CallRoomScreenProps) {
     );
   }
 
+  // 4a. Cloudflare Calls provider branch
+  if (provider === 'cloudflare') {
+    const cfAppId =
+      decodedToken?.appId ||
+      currentSession?.callsAppId ||
+      assignedCall?.callsAppId ||
+      ENV.CLOUDFLARE_CALLS_APP_ID;
+
+    if (!cfAppId) {
+      return (
+        <View
+          style={[
+            styles.loadingContainer,
+            {
+              paddingTop: insets.top,
+              paddingBottom: Math.max(insets.bottom, 20),
+            },
+          ]}
+        >
+          <AlertTriangle size={48} color={Theme.colors.error} />
+          <Text style={styles.loadingTitle}>Configuración de Cloudflare Requerida</Text>
+          <Text style={styles.loadingSub}>
+            No se detectó el App ID de Cloudflare Calls ni en el token firmado ni en las variables de entorno (EXPO_PUBLIC_CLOUDFLARE_CALLS_APP_ID).
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={initRoom}>
+            <RotateCcw size={18} color="#FFFFFF" />
+            <Text style={styles.retryButtonText}>Reintentar enlace</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.closeButton} onPress={onCallEnded}>
+            <Text style={styles.closeButtonText}>Volver al panel</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <CloudflareCallRoom
+        config={{
+          appId: cfAppId,
+          token: token,
+          apiUrl: ENV.CLOUDFLARE_CALLS_API_URL,
+        }}
+        initialVideo={false}
+        onCallEnded={onCallEnded}
+        isChaplainRole={isChaplainRole}
+      />
+    );
+  }
+
+  // 4b. LiveKit provider branch (Default, 100% original behavior)
   return (
     <LiveKitRoom
       serverUrl={ENV.LIVEKIT_WS_URL}

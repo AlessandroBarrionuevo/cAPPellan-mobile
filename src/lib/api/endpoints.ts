@@ -31,4 +31,28 @@ export const ENDPOINTS = {
   BLOG_TAGS: '/blogs/tags',
   BLOG_DRAFT: '/blogs/draft',
   BLOG_DRAFT_PUBLISH: '/blogs/draft/publish',
+  // Section 10: Biblia PDDPT & Perlitas
+  PERLITA_DEL_DIA: (date?: string) =>
+    date ? `/api/perlita/del-dia?date=${encodeURIComponent(date)}` : '/api/perlita/del-dia',
+  PERLITA_RANDOM: '/api/perlita/random',
+  BIBLE_METADATA: '/api/bible/metadata',
+  BIBLE_BOOKS: '/api/bible/books',
+  BIBLE_BOOK: (book: string) => `/api/bible/books/${encodeURIComponent(book)}`,
+  BIBLE_CHAPTER: (book: string, chapter: number) =>
+    `/api/bible/books/${encodeURIComponent(book)}/chapters/${chapter}`,
+  BIBLE_VERSE: (book: string, chapter: number, verse: string) =>
+    `/api/bible/books/${encodeURIComponent(book)}/chapters/${chapter}/verses/${encodeURIComponent(verse)}`,
+  BIBLE_SEARCH: (q: string, testament?: string, limit = 50) => {
+    let url = `/api/bible/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+    if (testament) url += `&testament=${encodeURIComponent(testament)}`;
+    return url;
+  },
+  BIBLE_DOWNLOAD: '/api/bible/download',
+  // Section 5: Prayer Comments
+  PRAYER_COMMENTS: (prayerId: number) => `/prayers/${prayerId}/comments`,
+  // Section 7: Chaplains & Profiles
+  CHAPLAINS_TEAM: '/chaplains/team',
+  CHAPLAIN_PROFILE: (id: number) => `/chaplains/${id}/profile`,
+  PROFILE_CHAPLAIN: '/profiles/chaplain',
+  PROFILE_BASIC_ME: '/profiles/basic/me',
 } as const;

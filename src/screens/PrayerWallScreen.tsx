@@ -12,12 +12,14 @@ import {
   Share,
   Alert,
   useWindowDimensions,
+  Modal,
 } from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAuthStore } from '../lib/stores/auth';
-import type { Prayer, PaginatedPrayersResponse, CreatePrayerRequest } from '../types/prayer';
+import { getPrayerComments, addPrayerComment } from '../lib/api/prayers';
+import type { Prayer, PaginatedPrayersResponse, CreatePrayerRequest, PrayerComment } from '../types/prayer';
 import {
   TacticalCard,
   TacticalButton,
@@ -33,6 +35,7 @@ import {
   Shield,
   User,
   Check,
+  X,
 } from 'lucide-react-native';
 
 const PRAYER_FILTERS = [
@@ -126,6 +129,41 @@ export default function PrayerWallScreen() {
 
   // Joined prayers set for optimistic updates
   const [joinedIds, setJoinedIds] = useState<Set<number>>(new Set());
+
+  // Section 5.4 & 5.5: Prayer Comments Modal State
+  const [activePrayerForComments, setActivePrayerForComments] = useState<Prayer | null>(null);
+  const [comments, setComments] = useState<PrayerComment[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [isPostingComment, setIsPostingComment] = useState(false);
+
+  const handleOpenComments = async (prayer: Prayer) => {
+    setActivePrayerForComments(prayer);
+    setCommentText('');
+    setIsLoadingComments(true);
+    try {
+      const list = await getPrayerComments(prayer.id);
+      setComments(list);
+    } catch (e) {
+      setComments([]);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  };
+
+  const handlePostComment = async () => {
+    if (!activePrayerForComments || !commentText.trim() || isPostingComment) return;
+    setIsPostingComment(true);
+    try {
+      const created = await addPrayerComment(activePrayerForComments.id, commentText.trim());
+      setComments((prev) => [...prev, created]);
+      setCommentText('');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'No se pudo publicar la palabra de aliento.');
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
 
   const fetchPrayers = useCallback(async () => {
     try {
@@ -328,11 +366,19 @@ export default function PrayerWallScreen() {
                 </Text>
               </View>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.commentActionBtn}
+              onPress={() => handleOpenComments(item)}
+              activeOpacity={0.8}
+            >
+              <MessageSquare size={15} color={Theme.colors.tacticalNavy} />
+              <Text style={styles.commentActionText}>Aliento & Oración</Text>
+            </TouchableOpacity>
           </View>
         </TacticalCard>
       );
     },
-    [joinedIds, handlePray, handleShare]
+    [joinedIds, handlePray, handleShare, handleOpenComments]
   );
 
   return (
@@ -363,6 +409,104 @@ export default function PrayerWallScreen() {
           )
         }
       />
+
+      {/* Prayer Comments Modal (Section 5.4 & 5.5) */}
+      <Modal
+        visible={Boolean(activePrayerForComments)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setActivePrayerForComments(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.commentsModalCard, globalStyles.shadowMd]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.modalTitle}>Palabras de Aliento & Oración</Text>
+                <Text style={styles.modalSub} numberOfLines={1}>
+                  {activePrayerForComments?.title || activePrayerForComments?.description}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setActivePrayerForComments(null)}>
+                <X size={20} color={Theme.colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Comments List */}
+            <ScrollView style={styles.commentsList} showsVerticalScrollIndicator={false}>
+              {isLoadingComments ? (
+                <View style={styles.commentsLoading}>
+                  <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
+                  <Text style={styles.commentsLoadingText}>Cargando mensajes de bendición...</Text>
+                </View>
+              ) : comments.length === 0 ? (
+                <View style={styles.commentsEmpty}>
+                  <Text style={styles.commentsEmptyTitle}>Aún no hay comentarios</Text>
+                  <Text style={styles.commentsEmptyText}>
+                    Sé el primero en dejar palabras de fortaleza para esta petición.
+                  </Text>
+                </View>
+              ) : (
+                comments.map((comment) => (
+                  <View key={comment.id} style={styles.commentCard}>
+                    <View style={styles.commentHeader}>
+                      <View style={styles.commentAuthorRow}>
+                        <Text style={styles.commentAuthorName}>{comment.authorName}</Text>
+                        <View style={styles.commentRoleBadge}>
+                          <Text style={styles.commentRoleText}>{comment.authorRole}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.commentTime}>
+                        {new Date(comment.createdAt).toLocaleDateString('es-AR', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                    <Text style={styles.commentContent}>{comment.content}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            {/* Post Comment Input Bar (Section 5.4) */}
+            {user ? (
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  style={styles.commentTextInput}
+                  placeholder="Escribí palabras de fe o aliento..."
+                  placeholderTextColor={Theme.colors.onSurfaceVariant}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.commentSendBtn,
+                    (!commentText.trim() || isPostingComment) && styles.commentSendBtnDisabled,
+                  ]}
+                  onPress={handlePostComment}
+                  disabled={!commentText.trim() || isPostingComment}
+                  activeOpacity={0.8}
+                >
+                  {isPostingComment ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Send size={15} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.commentAnonNote}>
+                <Lock size={14} color={Theme.colors.onSurfaceVariant} />
+                <Text style={styles.commentAnonNoteText}>
+                  Iniciá sesión para publicar palabras de aliento a esta petición.
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -618,5 +762,166 @@ const styles = StyleSheet.create({
     ...globalStyles.bodySm,
     color: Theme.colors.onSurfaceVariant,
     textAlign: 'center',
+  },
+  commentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Theme.roundness.md,
+    gap: 6,
+  },
+  commentActionText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: Theme.colors.tacticalNavy,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  commentsModalCard: {
+    backgroundColor: Theme.colors.surfaceContainerLowest,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontFamily: Theme.fonts.headline,
+    fontSize: 17,
+    color: Theme.colors.onSurface,
+  },
+  modalSub: {
+    ...globalStyles.bodySm,
+    fontSize: 11,
+    color: Theme.colors.onSurfaceVariant,
+    marginTop: 2,
+  },
+  commentsList: {
+    maxHeight: 320,
+    marginBottom: 14,
+  },
+  commentsLoading: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  commentsLoadingText: {
+    ...globalStyles.bodySm,
+    fontSize: 11,
+    color: Theme.colors.onSurfaceVariant,
+  },
+  commentsEmpty: {
+    paddingVertical: 28,
+    alignItems: 'center',
+    gap: 4,
+  },
+  commentsEmptyTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: Theme.colors.onSurface,
+  },
+  commentsEmptyText: {
+    ...globalStyles.bodySm,
+    fontSize: 11,
+    color: Theme.colors.onSurfaceVariant,
+    textAlign: 'center',
+  },
+  commentCard: {
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.roundness.md,
+    padding: 10,
+    marginBottom: 8,
+    gap: 4,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  commentAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  commentAuthorName: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: Theme.colors.onSurface,
+  },
+  commentRoleBadge: {
+    backgroundColor: Theme.colors.surfaceContainer,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  commentRoleText: {
+    ...globalStyles.labelCaps,
+    fontSize: 8,
+    color: Theme.colors.secondary,
+  },
+  commentTime: {
+    ...globalStyles.labelCaps,
+    fontSize: 8,
+    color: Theme.colors.onSurfaceVariant,
+  },
+  commentContent: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Theme.colors.onSurface,
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
+  },
+  commentTextInput: {
+    flex: 1,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.roundness.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: Theme.colors.onSurface,
+    maxHeight: 80,
+  },
+  commentSendBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: Theme.roundness.md,
+    backgroundColor: Theme.colors.tacticalNavy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentSendBtnDisabled: {
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+  },
+  commentAnonNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    padding: 10,
+    borderRadius: Theme.roundness.md,
+    gap: 8,
+    marginTop: 6,
+  },
+  commentAnonNoteText: {
+    ...globalStyles.bodySm,
+    fontSize: 11,
+    color: Theme.colors.onSurfaceVariant,
+    flex: 1,
   },
 });

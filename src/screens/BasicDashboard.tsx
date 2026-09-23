@@ -11,6 +11,7 @@ import {
   Image,
   useWindowDimensions,
   Platform,
+  Share,
 } from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { useCallStore } from '../lib/stores/call';
@@ -19,7 +20,10 @@ import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { SseClient } from '../lib/api/sse';
 import { requestMediaPermissions } from '../lib/permissions';
-import type { Session, SessionType, CallIntake } from '../types/api';
+import { getPerlitaDelDia, getRandomPerlita } from '../lib/api/bible';
+import { getChaplainTeam } from '../lib/api/profiles';
+import type { Perlita } from '../types/bible';
+import type { Session, SessionType, CallIntake, ChaplainTeamMember } from '../types/api';
 import CallIntakeModal from '../components/duty/CallIntakeModal';
 import {
   TacticalCard,
@@ -41,6 +45,9 @@ import {
   RotateCcw,
   Sparkles,
   MessageSquare,
+  Share2,
+  BookOpen,
+  RefreshCw,
 } from 'lucide-react-native';
 
 interface BasicDashboardProps {
@@ -92,6 +99,68 @@ export default function BasicDashboard({
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+
+  // Section 10: Dynamic Perlita del Día Widget State
+  const [perlita, setPerlita] = useState<Perlita | null>(null);
+  const [isLoadingPerlita, setIsLoadingPerlita] = useState(false);
+  const [isRandomPerlita, setIsRandomPerlita] = useState(false);
+
+  // Section 7.1: Real Chaplain Team Directory
+  const [chaplainTeam, setChaplainTeam] = useState<ChaplainTeamMember[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingPerlita(true);
+    getPerlitaDelDia()
+      .then((data) => {
+        if (isMounted) setPerlita(data);
+      })
+      .catch((err) => {
+        console.warn('Error loading daily perlita in dashboard:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingPerlita(false);
+      });
+
+    // Fetch real chaplains from Section 7.1
+    getChaplainTeam()
+      .then((team) => {
+        if (isMounted && Array.isArray(team) && team.length > 0) {
+          setChaplainTeam(team);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error loading chaplain team:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleRandomPerlitaInDashboard = async () => {
+    setIsLoadingPerlita(true);
+    try {
+      const data = await getRandomPerlita();
+      setPerlita(data);
+      setIsRandomPerlita(true);
+    } catch (err) {
+      // Fallback
+    } finally {
+      setIsLoadingPerlita(false);
+    }
+  };
+
+  const handleSharePerlitaInDashboard = async () => {
+    if (!perlita) return;
+    try {
+      await Share.share({
+        message: `«${perlita.text}» — ${perlita.reference} (${perlita.translation})\n\n${perlita.attribution || ''}\nCompartido desde CapellanAPP`,
+      });
+    } catch (e) {
+      // Ignored
+    }
+  };
 
   const currentSession = useCallStore((state) => state.currentSession);
   const callStatus = useCallStore((state) => state.callStatus);
@@ -424,99 +493,136 @@ export default function BasicDashboard({
       <View style={styles.rosterSection}>
         <View style={styles.rosterSectionHeader}>
           <Text style={styles.rosterSectionTitle}>Capellanes de Guardia</Text>
-          <Text style={styles.rosterSectionBadge}>3 DISPONIBLES</Text>
+          <Text style={styles.rosterSectionBadge}>
+            {chaplainTeam.length > 0 ? `${chaplainTeam.length} EN EQUIPO` : '3 DISPONIBLES'}
+          </Text>
         </View>
 
         <View style={styles.rosterList}>
-          {CHAPLAIN_ROSTER.map((chaplain) => (
-            <TacticalCard
-              key={chaplain.id}
-              style={styles.chaplainCard}
-              padding={10}
-            >
+          {(chaplainTeam.length > 0 ? chaplainTeam : CHAPLAIN_ROSTER).map((item: any) => {
+            const id = item.userId || item.id;
+            const name = item.fullName || item.name;
+            const branch = item.militaryForce || item.branch || 'Capellanía';
+            const specialty =
+              item.bio ||
+              item.specialty ||
+              (item.militaryRank ? `Rango: ${item.militaryRank}` : 'Asistencia pastoral y contención');
+            const avatar =
+              item.avatarUrl ||
+              item.avatar ||
+              'https://lh3.googleusercontent.com/aida-public/AB6AXuBqDZ2JpvNoZkWZF0odAe80kpx0qGWzdevv88xrvcS6dpIguNmVQbkNPw2LjQpPdMsgsA0rItqZg37YqDbkoiXFTqTu5eIaE8YiaCmRx6xaodA-G3wkW4Uvik6qGtzF5M1R4X34VbuUhjYGrHIlh1tLp_zoffvUwN6UwMtQzrkIUySkwdS7qTr3mE0_c6nEIhQ9V-9laJcB-UM5JhyE0ikuJHNQ7tQWo_KSvEynMAfvI4NFfiV29rWPRA';
+            const isOnline = item.status === 'ONLINE' || !item.status;
 
-              <View style={styles.chaplainRow}>
-                <View style={styles.avatarWrapper}>
-                  <Image
-                    source={{ uri: chaplain.avatar }}
-                    style={styles.avatarImage}
-                  />
-                  <View style={styles.onlineDot} />
+            return (
+              <TacticalCard
+                key={id}
+                style={styles.chaplainCard}
+                padding={10}
+              >
+                <View style={styles.chaplainRow}>
+                  <View style={styles.avatarWrapper}>
+                    <Image
+                      source={{ uri: avatar }}
+                      style={styles.avatarImage}
+                    />
+                    <View
+                      style={[
+                        styles.onlineDot,
+                        !isOnline && { backgroundColor: '#94A3B8' },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.chaplainInfo}>
+                    <View style={styles.branchTag}>
+                      <Text style={styles.branchTagText}>{branch}</Text>
+                    </View>
+                    <View style={styles.chaplainNameRow}>
+                      <Text style={styles.chaplainName}>{name}</Text>
+                    </View>
+                    <View>
+                      <Text style={styles.chaplainSpecialty} numberOfLines={2}>
+                        {specialty}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-
-                <View style={styles.chaplainInfo}>
-                  <View style={styles.branchTag}>
-                    <Text style={styles.branchTagText}>{chaplain.branch}</Text>
-                  </View>
-                  <View style={styles.chaplainNameRow}>
-                    <Text style={styles.chaplainName}>{chaplain.name}</Text>
-                  </View>
-                  <View >
-                    <Text style={styles.chaplainSpecialty} numberOfLines={2}>
-                      {chaplain.specialty}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* <View style={styles.chaplainActionButtons}>
-                  <TouchableOpacity
-                    style={styles.chatIconButton}
-                    onPress={() => {
-                      setSelectedType('CHAT');
-                      handleStartCall('CHAT');
-                    }}
-                    activeOpacity={0.8}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    accessibilityLabel={`Chatear con ${chaplain.name}`}
-                  >
-                    <MessageSquare size={15} color={Theme.colors.tacticalNavy} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.callIconButton}
-                    onPress={() => {
-                      setSelectedType('VIDEO');
-                      handleStartCall('VIDEO');
-                    }}
-                    activeOpacity={0.8}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    accessibilityLabel={`Llamar a ${chaplain.name}`}
-                  >
-                    <Phone size={15} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View> */}
-              </View>
-            </TacticalCard>
-          ))}
+              </TacticalCard>
+            );
+          })}
         </View>
       </View>
 
-      {/* 3. Daily Reflection of Strength: Salmo 91:2 */}
+      {/* 3. Daily Devotional: Perlita del Día Widget */}
       <TacticalCard style={styles.reflectionCard} padding={16}>
         <View style={styles.reflectionHeader}>
-          <Text style={styles.reflectionBadge}>FORTALEZA DIARIA DEL GUARDIA</Text>
-        </View>
-
-        <Text style={styles.quoteText}>
-          “Diré yo al Señor: Esperanza mía, y castillo mío; mi Dios, en quien confiaré.”
-        </Text>
-
-        <View style={styles.reflectionFooter}>
-          <Text style={styles.scriptureRef}>Salmo 91:2</Text>
-          <TouchableOpacity
-            style={styles.audioPrayerBtn}
-            onPress={() => setIsPlayingAudio((prev) => !prev)}
-            activeOpacity={0.8}
-          >
-            {isPlayingAudio ? (
-              <Pause size={16} color={Theme.colors.tacticalNavy} />
-            ) : (
-              <Play size={16} color={Theme.colors.tacticalNavy} />
-            )}
-            <Text style={styles.audioPrayerText}>
-              {isPlayingAudio ? 'Pausar (1:45)' : 'Oración Breve (2 min)'}
+          <View style={styles.reflectionBadgeRow}>
+            <Sparkles size={14} color={Theme.colors.secondary} />
+            <Text style={styles.reflectionBadge}>
+              {isRandomPerlita ? 'PERLITA DEVOCIONAL ALEATORIA' : 'PERLITA DEL DÍA · FORTALEZA DEL GUARDIA'}
             </Text>
-          </TouchableOpacity>
+          </View>
+          {perlita?.date && (
+            <Text style={styles.reflectionToday}>{perlita.date}</Text>
+          )}
         </View>
+
+        {isLoadingPerlita ? (
+          <View style={styles.widgetLoading}>
+            <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
+            <Text style={styles.widgetLoadingText}>Cargando versículo del día...</Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.quoteText}>
+              “{perlita?.text || 'Yavé es mi Pastor. Nada me faltará.'}”
+            </Text>
+
+            <View style={styles.reflectionFooter}>
+              <View style={styles.widgetFooterTextCol}>
+                <Text style={styles.scriptureRef}>
+                  {perlita?.reference || 'Salmos 23:1'} · {perlita?.translation || 'PDDPT'}
+                </Text>
+                {perlita?.attribution ? (
+                  <Text style={styles.widgetAttribution} numberOfLines={1}>
+                    {perlita.attribution}
+                  </Text>
+                ) : null}
+              </View>
+
+              <View style={styles.widgetActionButtons}>
+                <TouchableOpacity
+                  style={styles.widgetIconBtn}
+                  onPress={handleRandomPerlitaInDashboard}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Generar perlita aleatoria"
+                >
+                  <RefreshCw size={14} color={Theme.colors.tacticalNavy} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.widgetIconBtn}
+                  onPress={handleSharePerlitaInDashboard}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Compartir versículo"
+                >
+                  <Share2 size={14} color={Theme.colors.tacticalNavy} />
+                </TouchableOpacity>
+
+                {onNavigateToBible && (
+                  <TouchableOpacity
+                    style={styles.widgetBibleBtn}
+                    onPress={onNavigateToBible}
+                    activeOpacity={0.8}
+                  >
+                    <BookOpen size={13} color="#FFFFFF" />
+                    <Text style={styles.widgetBibleBtnText}>Leer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </>
+        )}
       </TacticalCard>
 
       {/* 4. Confidentiality Protocol & Crisis Helpline Link */}
@@ -931,6 +1037,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
+  reflectionBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   reflectionBadge: {
     ...globalStyles.labelCaps,
     color: Theme.colors.secondary,
@@ -941,6 +1052,16 @@ const styles = StyleSheet.create({
     ...globalStyles.labelCaps,
     color: Theme.colors.onSurfaceVariant,
     fontSize: 10,
+  },
+  widgetLoading: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  widgetLoadingText: {
+    ...globalStyles.bodySm,
+    fontSize: 11,
+    color: Theme.colors.onSurfaceVariant,
   },
   quoteText: {
     fontFamily: Theme.fonts.headline,
@@ -954,25 +1075,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+  },
+  widgetFooterTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   scriptureRef: {
     fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 12,
-    color: Theme.colors.onSurfaceVariant,
+    color: Theme.colors.tacticalNavy,
   },
-  audioPrayerBtn: {
+  widgetAttribution: {
+    ...globalStyles.bodySm,
+    fontSize: 9,
+    color: Theme.colors.onSurfaceVariant,
+    marginTop: 2,
+  },
+  widgetActionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Theme.colors.surfaceContainerLow,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Theme.roundness.sm,
     gap: 6,
   },
-  audioPrayerText: {
+  widgetIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  widgetBibleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.colors.tacticalNavy,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Theme.roundness.sm,
+    gap: 4,
+  },
+  widgetBibleBtnText: {
     fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 11,
-    color: Theme.colors.onSurface,
+    color: '#FFFFFF',
   },
   confidentialityBanner: {
     marginTop: 4,

@@ -62,6 +62,8 @@ export interface CallRequestPayload {
 export interface Session {
   id: number;
   livekitRoomName?: string;
+  provider?: 'livekit' | 'cloudflare';
+  callsAppId?: string;
   status: 'WAITING' | 'IN_PROGRESS' | 'ENDED';
   sessionType?: SessionType;
   userId: number;
@@ -76,6 +78,8 @@ export interface Session {
 export interface CallResponse {
   sessionId: number;
   sessionType?: SessionType;
+  provider?: 'livekit' | 'cloudflare';
+  callsAppId?: string;
   livekitRoomName?: string;
   token?: string | null;
   clientToken?: string | null;
@@ -108,4 +112,87 @@ export interface ChaplainInfo {
   status: 'ONLINE' | 'OFFLINE' | 'IN_CALL';
   userId?: number | null;
   enteredQueueAt?: string | null;
+}
+
+export interface PrayerItem {
+  id: number;
+  title: string;
+  description: string;
+  content?: string[];
+  authorName?: string;
+  isAnonymous?: boolean;
+  prayerCount: number;
+  createdAt: string;
+}
+
+export interface PrayerComment {
+  id: number;
+  prayerRequestId: number;
+  userId: number;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface CreatePrayerRequest {
+  title: string;
+  description: string;
+  content?: string[];
+  authorName?: string;
+  isAnonymous?: boolean;
+}
+
+export interface ChaplainTeamMember {
+  userId: number;
+  username: string;
+  fullName: string;
+  militaryForce?: string | null;
+  yearsOfService?: number | null;
+  isActiveInForce?: boolean | null;
+  militaryRank?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  role: string;
+  status: string;
+}
+
+export interface BasicProfile {
+  userId: number;
+  username: string;
+  fullName: string;
+  isAnonymous: boolean;
+  phone?: string | null;
+  location?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface UpdateBasicProfileRequest {
+  fullName?: string;
+  isAnonymous?: boolean;
+  phone?: string;
+  location?: string;
+}
+
+export interface ChaplainProfile {
+  userId: number;
+  username: string;
+  fullName: string;
+  militaryForce?: string | null;
+  yearsOfService?: number | null;
+  isActiveInForce?: boolean | null;
+  militaryRank?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface UpdateChaplainProfileRequest {
+  fullName?: string;
+  militaryForce?: string;
+  yearsOfService?: number;
+  isActiveInForce?: boolean;
+  militaryRank?: string;
+  bio?: string;
+  avatarUrl?: string;
 }
