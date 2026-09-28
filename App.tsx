@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { SafeAppProvider } from './src/lib/safeArea';
-import { useFonts, PlayfairDisplay_600SemiBold, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
-import { Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
+import { useFonts } from 'expo-font';
+import { IosevkaCharon_500Medium, IosevkaCharon_700Bold } from '@expo-google-fonts/iosevka-charon';
+import { Commissioner_400Regular, Commissioner_600SemiBold } from '@expo-google-fonts/commissioner';
 import { useAuthStore } from './src/lib/stores/auth';
 import { useCallStore } from './src/lib/stores/call';
 import { useChaplainStore } from './src/lib/stores/chaplain';
@@ -15,10 +16,12 @@ import { requestNotificationPermissionAndScheduleReminder } from './src/lib/noti
 import { AppLayout, AuthLayout, AppTab } from './src/layouts';
 
 // Screens & Views
-import LoginScreen from './src/screens/LoginScreen';
+import LoginScreen from './src/screens/LoginScreen'; // Original screen preserved
+import LoginScreenPreview from './src/screens/LoginScreenPreview';
 import RegisterScreen from './src/screens/RegisterScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
-import BasicDashboard from './src/screens/BasicDashboard';
+import BasicDashboard from './src/screens/BasicDashboard'; // Original intact
+import BasicDashboardPreview from './src/screens/BasicDashboardPreview';
 import ChaplainDashboard from './src/screens/ChaplainDashboard';
 import LeaderDashboard from './src/screens/LeaderDashboard';
 import SuperuserDashboard from './src/screens/SuperuserDashboard';
@@ -26,7 +29,8 @@ import CallRoomScreen from './src/screens/CallRoomScreen';
 import ChatRoomScreen from './src/screens/ChatRoomScreen';
 import PrayerWallScreen from './src/screens/PrayerWallScreen';
 import ContentScreen from './src/screens/ContentScreen';
-import LecturaScreen from './src/screens/LecturaScreen';
+import LecturaScreen from './src/screens/LecturaScreen'; // Fallback intact
+import BibleReaderPreview from './src/screens/BibleReaderPreview';
 import ProfileScreen from './src/screens/ProfileScreen';
 import HubScreen from './src/screens/HubScreen';
 import BlogFeedScreen from './src/screens/BlogFeedScreen';
@@ -56,10 +60,10 @@ export default function App() {
   const currentSession = useCallStore((state) => state.currentSession);
 
   const [fontsLoaded] = useFonts({
-    PlayfairDisplay_600SemiBold,
-    PlayfairDisplay_700Bold,
-    Inter_400Regular,
-    Inter_600SemiBold,
+    IosevkaCharon_500Medium,
+    IosevkaCharon_700Bold,
+    Commissioner_400Regular,
+    Commissioner_600SemiBold,
   });
 
   useEffect(() => {
@@ -169,7 +173,7 @@ export default function App() {
 
       return (
         <AuthLayout>
-          <LoginScreen
+          <LoginScreenPreview
             onNavigateToRegister={() => setAuthMode('register')}
             onNavigateToForgotPassword={() => setAuthMode('forgot_password')}
           />
@@ -277,7 +281,7 @@ export default function App() {
         case 'BASIC':
         default:
           return (
-            <BasicDashboard
+            <BasicDashboardPreview
               onJoinCall={() => setInCallView(true)}
               onJoinChat={() => setActiveTab('chat')}
               onNavigateToBible={() => setActiveTab('lectura')}
@@ -337,7 +341,7 @@ export default function App() {
           return <BlogFeedScreen />;
         case 'biblia':
         case 'lectura':
-          return <LecturaScreen />;
+          return <BibleReaderPreview onBack={() => setActiveTab('home')} />;
         case 'oraciones':
           return <PrayerWallScreen />;
         case 'perfil':

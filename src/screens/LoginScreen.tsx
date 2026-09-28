@@ -78,11 +78,16 @@ export default function LoginScreen({
           <View style={[styles.emblemWrapper, globalStyles.shadowSm]}>
             <InstitutionalEmblem size={68} />
           </View>
-          <View style={styles.titleRow}>
+          <View style={styles.secondTitleRow}>
+            <Text style={styles.titlePrefix}>powered by </Text>
             <Text style={styles.titlePrefix}>c</Text>
-            <Text style={styles.titleApp}>APP</Text>
+            <Text style={styles.titleAux}>APP</Text>
             <Text style={styles.titleSuffix}>ellan</Text>
           </View>
+          <View style={styles.titleRow}>
+            <Text style={styles.titleApp}>Capellania Evangelica</Text>
+          </View>
+          
           <Text style={styles.subtitle}>
             Servicio y Contención Espiritual para Fuerzas Armadas y de Seguridad
           </Text>
@@ -141,12 +146,12 @@ export default function LoginScreen({
 
           {/* Primary Action Button */}
           <TacticalButton
-            title="Iniciar Sesión Segura"
+            title="Iniciar Sesión"
             onPress={handleLogin}
             loading={loading}
             variant="secondary"
             size="lg"
-            leftIcon={<ShieldCheck size={20} color="#FFFFFF" />}
+            
             style={styles.submitButton}
           />
         </TacticalCard>
@@ -202,15 +207,20 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.surfaceContainerLowest,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 2,
   },
   titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 0,
+  },
+  secondTitleRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   titlePrefix: {
     fontFamily: Theme.fonts.headline,
-    fontSize: 26,
+    fontSize: 10,
     color: Theme.colors.onSurface,
   },
   titleApp: {
@@ -219,14 +229,19 @@ const styles = StyleSheet.create({
     color: Theme.colors.tacticalNavy,
     letterSpacing: -0.5,
   },
+  titleAux: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 14,
+    color: Theme.colors.tacticalNavy,
+    letterSpacing: -0.5,
+  },
   titleSuffix: {
     fontFamily: Theme.fonts.headline,
-    fontSize: 26,
+    fontSize: 10,
     color: Theme.colors.onSurface,
   },
   subtitle: {
-    ...globalStyles.bodySm,
-    color: Theme.colors.onSurfaceVariant,
+    color:"#000000",
     textAlign: 'center',
     marginTop: 4,
     maxWidth: 320,
@@ -271,7 +286,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   checkboxActive: {
-    backgroundColor: Theme.colors.secondary,
+    backgroundColor: "#2f93ef",
   },
   rememberText: {
     ...globalStyles.bodySm,
@@ -286,6 +301,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 12,
+    backgroundColor: '#0c7ae0'
   },
   registerPrompt: {
     flexDirection: 'column',
@@ -300,7 +316,7 @@ const styles = StyleSheet.create({
   registerLink: {
     ...globalStyles.bodySm,
     fontFamily: Theme.fonts.bodySemiBold,
-    color: Theme.colors.secondary,
+    color: "#2f93ef",
     textDecorationLine: 'underline',
   },
   banner: {

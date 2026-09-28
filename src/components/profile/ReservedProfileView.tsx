@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   TextInput,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { useAuthStore } from '../../lib/stores/auth';
@@ -26,6 +27,7 @@ import {
   SlidersHorizontal,
   Power,
   ChevronRight,
+  ChevronDown,
   Gavel,
   CheckCircle2,
   User,
@@ -35,6 +37,7 @@ import {
   Eye,
   Award,
   Save,
+  X,
 } from 'lucide-react-native';
 import {
   getMyBasicProfile,
@@ -42,7 +45,20 @@ import {
   getChaplainProfile,
   updateChaplainProfile,
 } from '../../lib/api/profiles';
-import type { AuthUser, BasicProfile, ChaplainProfile } from '../../types/api';
+import type { AuthUser, BasicProfile, ChaplainProfile, MilitaryForce } from '../../types/api';
+
+export const MILITARY_FORCES: { value: MilitaryForce; label: string; code: string }[] = [
+  { value: 'EJERCITO', label: 'Ejército Argentino', code: 'EA' },
+  { value: 'ARMADA', label: 'Armada Argentina', code: 'ARA' },
+  { value: 'FUERZA_AEREA', label: 'Fuerza Aérea Argentina', code: 'FAA' },
+  { value: 'GENDARMERIA', label: 'Gendarmería Nacional', code: 'GNA' },
+  { value: 'PREFECTURA', label: 'Prefectura Naval Argentina', code: 'PNA' },
+  { value: 'POLICIA_FEDERAL', label: 'Policía Federal Argentina', code: 'PFA' },
+  { value: 'POLICIA_DE_LA_CIUDAD', label: 'Policía de la Ciudad', code: 'PCABA' },
+  { value: 'POLICIA_PROVINCIAL', label: 'Policía Provincial', code: 'PP' },
+  { value: 'SERVICIO_PENITENCIARIO', label: 'Servicio Penitenciario', code: 'SPF' },
+  { value: 'OTRA', label: 'Otra Fuerza / Institución', code: 'OTRA' },
+];
 
 export interface ReservedProfileViewProps {
   user?: AuthUser | null;
@@ -78,9 +94,11 @@ export default function ReservedProfileView({
 
   // Chaplain specific fields
   const [militaryRank, setMilitaryRank] = useState('');
-  const [militaryForce, setMilitaryForce] = useState('');
+  const [militaryForce, setMilitaryForce] = useState<MilitaryForce | ''>('');
   const [yearsOfService, setYearsOfService] = useState('');
+  const [isActiveInForce, setIsActiveInForce] = useState<boolean>(true);
   const [bio, setBio] = useState('');
+  const [showForcePicker, setShowForcePicker] = useState(false);
 
   const isChaplain =
     user?.role === 'CHAPLAIN' ||
@@ -99,8 +117,13 @@ export default function ReservedProfileView({
           setChaplainProfile(data);
           setFullName(data.fullName || '');
           setMilitaryRank(data.militaryRank || '');
-          setMilitaryForce(data.militaryForce || '');
-          setYearsOfService(data.yearsOfService ? String(data.yearsOfService) : '');
+          setMilitaryForce((data.militaryForce as MilitaryForce) || '');
+          setYearsOfService(
+            data.yearsOfService !== undefined && data.yearsOfService !== null
+              ? String(data.yearsOfService)
+              : ''
+          );
+          setIsActiveInForce(data.isActiveInForce ?? true);
           setBio(data.bio || '');
         })
         .catch(() => {
@@ -136,11 +159,39 @@ export default function ReservedProfileView({
     setIsSaving(true);
     try {
       if (isChaplain) {
+        const trimmedName = fullName.trim();
+        if (!trimmedName) {
+          Alert.alert('Campo Requerido', 'El nombre completo es obligatorio.');
+          setIsSaving(false);
+          return;
+        }
+
+        if (!militaryForce) {
+          Alert.alert(
+            'Campo Requerido',
+            'Debés seleccionar la Fuerza Militar o de Seguridad en la que prestás o prestaste servicio.'
+          );
+          setIsSaving(false);
+          return;
+        }
+
+        const parsedYears =
+          yearsOfService.trim() !== '' ? parseInt(yearsOfService.trim(), 10) : NaN;
+        if (isNaN(parsedYears) || parsedYears < 0) {
+          Alert.alert(
+            'Años de Servicio Inválidos',
+            'Por favor ingresá un número válido para los años de servicio (0 o mayor).'
+          );
+          setIsSaving(false);
+          return;
+        }
+
         const updated = await updateChaplainProfile({
-          fullName: fullName.trim() || undefined,
-          militaryForce: militaryForce.trim() || undefined,
+          fullName: trimmedName,
+          militaryForce: militaryForce as MilitaryForce,
           militaryRank: militaryRank.trim() || undefined,
-          yearsOfService: yearsOfService ? parseInt(yearsOfService, 10) : undefined,
+          yearsOfService: parsedYears,
+          isActiveInForce: isActiveInForce,
           bio: bio.trim() || undefined,
         });
         setChaplainProfile(updated);
@@ -198,7 +249,8 @@ export default function ReservedProfileView({
   const isTablet = width > 500;
 
   return (
-    <ScrollView
+    <>
+      <ScrollView
       style={styles.container}
       contentContainerStyle={[
         styles.scrollContent,
@@ -335,21 +387,82 @@ export default function ReservedProfileView({
           </>
         ) : (
           <>
-            {/* Chaplain Specific Fields (Section 7.3) */}
+            {/* 1. Military Force Select */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>FUERZA MILITAR / DE SEGURIDAD</Text>
-              <View style={styles.inputWrapper}>
-                <Award size={16} color={Theme.colors.onSurfaceVariant} />
-                <TextInput
-                  style={styles.textInput}
-                  value={militaryForce}
-                  onChangeText={setMilitaryForce}
-                  placeholder="GENDARMERIA, EJERCITO, etc."
-                  placeholderTextColor={Theme.colors.onSurfaceVariant}
-                />
+              <TouchableOpacity
+                style={styles.selectWrapper}
+                onPress={() => setShowForcePicker(true)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.selectLeft}>
+                  <Award size={16} color={Theme.colors.onSurfaceVariant} />
+                  <Text
+                    style={[
+                      styles.selectText,
+                      !militaryForce && styles.selectPlaceholder,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {MILITARY_FORCES.find((f) => f.value === militaryForce)?.label ||
+                      'Seleccionar Fuerza Militar / De Seguridad'}
+                  </Text>
+                </View>
+                <ChevronDown size={16} color={Theme.colors.onSurfaceVariant} />
+              </TouchableOpacity>
+            </View>
+
+            {/* 2. Active in Force Status */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>SITUACIÓN DE REVISTA / ESTADO EN LA FUERZA</Text>
+              <View style={styles.statusToggleContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.statusToggleOption,
+                    isActiveInForce && styles.statusToggleOptionActive,
+                  ]}
+                  onPress={() => setIsActiveInForce(true)}
+                  activeOpacity={0.8}
+                >
+                  <CheckCircle2
+                    size={15}
+                    color={isActiveInForce ? '#FFFFFF' : Theme.colors.onSurfaceVariant}
+                  />
+                  <Text
+                    style={[
+                      styles.statusToggleText,
+                      isActiveInForce && styles.statusToggleTextActive,
+                    ]}
+                  >
+                    En Servicio Activo
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.statusToggleOption,
+                    !isActiveInForce && styles.statusToggleOptionActive,
+                  ]}
+                  onPress={() => setIsActiveInForce(false)}
+                  activeOpacity={0.8}
+                >
+                  <CheckCircle2
+                    size={15}
+                    color={!isActiveInForce ? '#FFFFFF' : Theme.colors.onSurfaceVariant}
+                  />
+                  <Text
+                    style={[
+                      styles.statusToggleText,
+                      !isActiveInForce && styles.statusToggleTextActive,
+                    ]}
+                  >
+                    Retirado / Reserva
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
 
+            {/* 3. Military Rank */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>RANGO O JERARQUÍA</Text>
               <View style={styles.inputWrapper}>
@@ -364,6 +477,7 @@ export default function ReservedProfileView({
               </View>
             </View>
 
+            {/* 4. Years of Service */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>AÑOS DE SERVICIO EN LA FUERZA</Text>
               <View style={styles.inputWrapper}>
@@ -371,18 +485,19 @@ export default function ReservedProfileView({
                   style={styles.textInput}
                   value={yearsOfService}
                   onChangeText={setYearsOfService}
-                  placeholder="16"
+                  placeholder="Ej. 16"
                   keyboardType="numeric"
                   placeholderTextColor={Theme.colors.onSurfaceVariant}
                 />
               </View>
             </View>
 
+            {/* 5. Pastoral Bio & Specialty */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>RESEÑA PASTORAL Y ESPECIALIDAD</Text>
-              <View style={[styles.inputWrapper, { height: 70, alignItems: 'flex-start' }]}>
+              <View style={[styles.inputWrapper, { height: 74, alignItems: 'flex-start' }]}>
                 <TextInput
-                  style={[styles.textInput, { height: 60, textAlignVertical: 'top' }]}
+                  style={[styles.textInput, { height: 64, textAlignVertical: 'top' }]}
                   value={bio}
                   onChangeText={setBio}
                   placeholder="Acompañamiento en crisis, frontera y estrés post-traumático..."
@@ -408,11 +523,7 @@ export default function ReservedProfileView({
 
       {/* 3. Confidentiality Legal & Pastoral Guarantee */}
       <TacticalCard style={styles.guaranteeCard} variant="low" padding={16}>
-        <View style={styles.guaranteeHeader}>
-          <View style={styles.guaranteeIconWrapper}>
-            <Gavel size={18} color={Theme.colors.secondary} />
-          </View>
-          <View style={styles.guaranteeTextCol}>
+        <View style={styles.guaranteeHeader}>          <View style={styles.guaranteeTextCol}>
             <Text style={styles.guaranteeTitle}>Garantía Canónica e Institucional</Text>
             <Text style={styles.guaranteeDesc}>
               Secreto de Confesión y Reserva Pastoral Garantizada por Estatuto Institucional. Ningún dato ni videollamada es registrado en servidores de mando.
@@ -533,6 +644,87 @@ export default function ReservedProfileView({
         style={styles.logoutButton}
       />
     </ScrollView>
+
+      {/* Force Selection Modal */}
+      <Modal
+        visible={showForcePicker}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowForcePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, isTablet && styles.tabletModalCard]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Award size={18} color={Theme.colors.tacticalNavy} />
+                <Text style={styles.modalHeaderTitle}>Fuerza Militar o de Seguridad</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowForcePicker(false)}
+                style={styles.modalCloseBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={18} color={Theme.colors.onSurfaceVariant} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Seleccioná la institución a la que pertenecés para registrar en tu legajo ministerial:
+            </Text>
+
+            <ScrollView style={styles.forceList} showsVerticalScrollIndicator={false}>
+              {MILITARY_FORCES.map((force) => {
+                const isSelected = militaryForce === force.value;
+                return (
+                  <TouchableOpacity
+                    key={force.value}
+                    style={[
+                      styles.forceOptionItem,
+                      isSelected && styles.forceOptionItemSelected,
+                    ]}
+                    onPress={() => {
+                      setMilitaryForce(force.value);
+                      setShowForcePicker(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.forceOptionLeft}>
+                      <View
+                        style={[
+                          styles.forceCodeBadge,
+                          isSelected && styles.forceCodeBadgeSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.forceCodeBadgeText,
+                            isSelected && styles.forceCodeBadgeTextSelected,
+                          ]}
+                        >
+                          {force.code}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.forceOptionText,
+                          isSelected && styles.forceOptionTextSelected,
+                        ]}
+                      >
+                        {force.label}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <CheckCircle2 size={18} color={Theme.colors.tacticalNavy} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -826,5 +1018,159 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginTop: 8,
+  },
+  selectWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderRadius: Theme.roundness.md,
+    paddingHorizontal: 12,
+    height: 42,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  selectLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 6,
+  },
+  selectText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 13,
+    color: Theme.colors.onSurface,
+  },
+  selectPlaceholder: {
+    color: Theme.colors.onSurfaceVariant,
+  },
+  statusToggleContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  statusToggleOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: Theme.roundness.md,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  statusToggleOptionActive: {
+    backgroundColor: Theme.colors.tacticalNavy,
+    borderColor: Theme.colors.tacticalNavy,
+  },
+  statusToggleText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: Theme.colors.onSurfaceVariant,
+  },
+  statusToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: Theme.roundness.lg,
+    padding: 18,
+    ...globalStyles.shadowMd,
+  },
+  tabletModalCard: {
+    maxWidth: 460,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalHeaderTitle: {
+    fontFamily: Theme.fonts.headline,
+    fontSize: 16,
+    color: Theme.colors.onSurface,
+  },
+  modalCloseBtn: {
+    padding: 4,
+    borderRadius: Theme.roundness.full,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+  },
+  modalSubtitle: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    color: Theme.colors.onSurfaceVariant,
+    marginBottom: 12,
+  },
+  forceList: {
+    maxHeight: 360,
+  },
+  forceOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: Theme.roundness.md,
+    marginBottom: 6,
+    backgroundColor: Theme.colors.surfaceContainerLow,
+  },
+  forceOptionItemSelected: {
+    backgroundColor: `${Theme.colors.tacticalNavy}14`,
+    borderWidth: 1,
+    borderColor: Theme.colors.tacticalNavy,
+  },
+  forceOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  forceCodeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: Theme.roundness.xs,
+    backgroundColor: Theme.colors.surfaceContainerHigh,
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  forceCodeBadgeSelected: {
+    backgroundColor: Theme.colors.tacticalNavy,
+  },
+  forceCodeBadgeText: {
+    ...globalStyles.labelCaps,
+    fontSize: 9,
+    color: Theme.colors.onSurfaceVariant,
+  },
+  forceCodeBadgeTextSelected: {
+    color: '#FFFFFF',
+  },
+  forceOptionText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 13,
+    color: Theme.colors.onSurface,
+    flex: 1,
+  },
+  forceOptionTextSelected: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: Theme.colors.tacticalNavy,
   },
 });

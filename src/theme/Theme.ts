@@ -5,15 +5,15 @@ export const Theme = {
     // Stitch Core Theme
     background: '#F8F9FB',
     surface: '#F8F9FB',
-    primary: '#25527E', // Tactical navy
-    primaryDark: '#0E3B69',
+    primary: '#0c7ae0', // Tactical navy
+    primaryDark: '#0c7ae0',
     primaryContainer: '#1A1C1E',
     onPrimary: '#FFFFFF',
     secondary: '#505F76', // Slate blue
     secondaryContainer: '#D4E3FF',
-    onSecondaryContainer: '#56657C',
+    onSecondaryContainer: '#0c7ae0',
     onSecondaryFixed: '#0C1C30',
-    tacticalNavy: '#25527E',
+    tacticalNavy: '#0c7ae0',
     
     // Surface Elevation Tones
     surfaceContainerLowest: '#FFFFFF',
@@ -67,10 +67,10 @@ export const Theme = {
     full: 9999,
   },
   fonts: {
-    headline: 'PlayfairDisplay_600SemiBold',
-    headlineBold: 'PlayfairDisplay_700Bold',
-    body: 'Inter_400Regular',
-    bodySemiBold: 'Inter_600SemiBold',
+    headline: 'IosevkaCharon_500Medium',
+    headlineBold: 'IosevkaCharon_700Bold',
+    body: 'Commissioner_400Regular',
+    bodySemiBold: 'Commissioner_600SemiBold',
   },
 };
 

@@ -124,7 +124,7 @@ export default function HubScreen({
           </Text>
 
           <TacticalButton
-            title="Explorar Audios"
+            title="Ver Contenido"
             onPress={onNavigateToContent}
             variant="primary"
             size="md"

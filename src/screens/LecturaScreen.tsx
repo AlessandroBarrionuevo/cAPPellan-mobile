@@ -763,10 +763,7 @@ export default function LecturaScreen() {
                 <Text style={styles.devotionalReference}>
                   {perlita.reference}
                 </Text>
-                <Text style={styles.devotionalAttribution}>
-                  {perlita.attribution ||
-                    'Palabra de Dios para ti © 2020 Asociación Bíblica Latinoamericana'}
-                </Text>
+               
               </View>
 
               {/* Devotional Action Row */}
@@ -777,7 +774,7 @@ export default function LecturaScreen() {
                   activeOpacity={0.8}
                 >
                   <BookOpen size={16} color={Theme.colors.tacticalNavy} />
-                  <Text style={styles.devotionalActionText}>Leer Capítulo</Text>
+                  <Text style={styles.devotionalActionText}>Leer</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -789,7 +786,7 @@ export default function LecturaScreen() {
                   <Text style={styles.devotionalActionText}>Compartir</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                {/* <TouchableOpacity
                   style={styles.devotionalActionBtn}
                   onPress={() => togglePerlitaSaved(perlita.reference)}
                   activeOpacity={0.8}
@@ -802,7 +799,7 @@ export default function LecturaScreen() {
                   <Text style={styles.devotionalActionText}>
                     {savedPerlitas.has(perlita.reference) ? 'Guardado' : 'Guardar'}
                   </Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
               </View>
 
               {/* Secondary Refresh / Reset Controls */}

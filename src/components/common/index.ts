@@ -6,3 +6,4 @@ export * from './ConfidentialityBanner';
 export * from './FilterPills';
 export * from './VigilHeader';
 export * from './BottomNavBar';
+export * from './CurvedBottomNavBar';

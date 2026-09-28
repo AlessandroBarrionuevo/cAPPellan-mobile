@@ -409,18 +409,18 @@ const styles = StyleSheet.create({
     marginBottom: Theme.spacing.stackMd,
   },
   verseParagraph: {
-    fontFamily: 'PlayfairDisplay_600SemiBold',
+    fontFamily: Theme.fonts.headline,
     fontSize: 19,
     lineHeight: 34,
     color: Theme.colors.onSurface,
   },
   verseNumber: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 12,
     color: Theme.colors.outline,
   },
   verseText: {
-    fontFamily: 'PlayfairDisplay_600SemiBold',
+    fontFamily: Theme.fonts.headline,
     fontSize: 19,
     lineHeight: 34,
     color: Theme.colors.onSurface,
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   quoteText: {
-    fontFamily: 'PlayfairDisplay_600SemiBold',
+    fontFamily: Theme.fonts.headline,
     fontSize: 18,
     lineHeight: 28,
     color: Theme.colors.primary,

@@ -165,7 +165,7 @@ export default function BasicDashboard({ onJoinCall }: BasicDashboardProps) {
       <View style={[styles.availabilityCard, globalStyles.shadowSoft]}>
         <View style={styles.pulseDot} />
         <View style={styles.availabilityTextContainer}>
-          <Text style={styles.availabilityTitle}>Capellanes en Guardia</Text>
+          <Text style={styles.availabilityTitle}>Nuestros Capellanes</Text>
           <Text style={styles.availabilitySubtitle}>
             Atención personalizada y confidencial
           </Text>

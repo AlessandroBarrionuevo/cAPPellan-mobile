@@ -174,11 +174,23 @@ export interface UpdateBasicProfileRequest {
   location?: string;
 }
 
+export type MilitaryForce =
+  | 'EJERCITO'
+  | 'ARMADA'
+  | 'FUERZA_AEREA'
+  | 'GENDARMERIA'
+  | 'PREFECTURA'
+  | 'POLICIA_FEDERAL'
+  | 'POLICIA_PROVINCIAL'
+  | 'POLICIA_DE_LA_CIUDAD'
+  | 'SERVICIO_PENITENCIARIO'
+  | 'OTRA';
+
 export interface ChaplainProfile {
   userId: number;
   username: string;
   fullName: string;
-  militaryForce?: string | null;
+  militaryForce?: MilitaryForce | string | null;
   yearsOfService?: number | null;
   isActiveInForce?: boolean | null;
   militaryRank?: string | null;
@@ -189,10 +201,11 @@ export interface ChaplainProfile {
 
 export interface UpdateChaplainProfileRequest {
   fullName?: string;
-  militaryForce?: string;
+  militaryForce?: MilitaryForce | string;
   yearsOfService?: number;
   isActiveInForce?: boolean;
   militaryRank?: string;
   bio?: string;
   avatarUrl?: string;
 }
+

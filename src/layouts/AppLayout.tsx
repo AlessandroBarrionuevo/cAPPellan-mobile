@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Theme } from '../theme/Theme';
 import { AuthUser } from '../types/api';
-import { VigilHeader, BottomNavBar, NavTab } from '../components/common';
+import { VigilHeader, BottomNavBar, CurvedBottomNavBar, NavTab } from '../components/common';
 import { useAppInsets } from '../lib/safeArea';
 
 export type AppTab =
@@ -141,9 +141,10 @@ export function AppLayout({
     user.role !== 'CHAPLAIN_CONTENT_LEADER';
 
   // Determine if top header should display
-  // Screens with dedicated top headers (Guardia, Chat, Informes, Perfil) do not need outer VigilHeader
+  // Screens with dedicated top headers or hero banners do not need outer VigilHeader
   const shouldRenderHeader =
     showHeader &&
+    activeTab !== 'home' &&
     activeTab !== 'guardia' &&
     activeTab !== 'chat' &&
     activeTab !== 'informes' &&
@@ -151,14 +152,16 @@ export function AppLayout({
     activeTab !== 'lectura' &&
     activeTab !== 'biblia';
 
+  const hasTopHeroBanner = activeTab === 'home';
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: hasTopHeroBanner ? 0 : insets.top }]}>
       <StatusBar style="dark" />
 
       {/* Optional Top Header for secondary screens */}
       {shouldRenderHeader && (
         <VigilHeader
-          title={activeTab === 'oraciones' || activeTab === 'mas' || activeTab === 'blogs' ? 'cAPPellan' : 'Vigil & Grace'}
+          title={activeTab === 'oraciones' || activeTab === 'mas' || activeTab === 'blogs' ? 'cAPPellan' : 'cAPPellan'}
           subtitle="Servicio de Capellanía"
           sectionBadge={getSectionBadge()}
           showBack={isSubScreen}
@@ -173,9 +176,9 @@ export function AppLayout({
       {/* Main Screen Content */}
       <View style={styles.mainContent}>{children}</View>
 
-      {/* Role-Specific Bottom Navigation Bar */}
+      {/* Modern Curved Bottom Navigation Bar (BottomNavBar preserved for fallback) */}
       {showBottomNav && (
-        <BottomNavBar
+        <CurvedBottomNavBar
           activeTab={getNavTab()}
           onTabChange={(tab) => onTabChange(tab as AppTab)}
           userRole={user.role}

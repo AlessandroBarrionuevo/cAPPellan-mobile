@@ -197,7 +197,7 @@ export default function LegacyProfileScreen() {
 
       {/* 4. Quick Logout / Cierre Inmediato Seguro */}
       <TacticalButton
-        title="Cierre Inmediato Seguro"
+        title="Cerrar Sesión"
         onPress={handleLogoutPress}
         variant="primary"
         size="lg"

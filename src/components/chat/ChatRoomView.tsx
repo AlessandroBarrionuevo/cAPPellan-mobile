@@ -18,6 +18,7 @@ import { ChatStompService } from '../../lib/chat/stompClient';
 import { useAuthStore } from '../../lib/stores/auth';
 import { request } from '../../lib/api/client';
 import { ENDPOINTS } from '../../lib/api/endpoints';
+import { getMyBasicProfile } from '../../lib/api/profiles';
 import type {
   ChatMessage,
   ChatConnectionStatus,
@@ -74,6 +75,24 @@ export function ChatRoomView({
     ? 'cAPPellan · Canal de Acompañamiento'
     : 'cAPPellan · Confidencial';
 
+  const [isAnonymousUser, setIsAnonymousUser] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!isChaplainMode && user) {
+      getMyBasicProfile()
+        .then((profile) => {
+          if (isMounted && profile?.isAnonymous) {
+            setIsAnonymousUser(true);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isChaplainMode, user]);
+
   const mySenderRole: ChatSenderRole = isChaplainMode
     ? 'CHAPLAIN'
     : user
@@ -82,6 +101,8 @@ export function ChatRoomView({
 
   const mySenderName = isChaplainMode
     ? user?.username || 'Capellán'
+    : isAnonymousUser
+    ? 'Oficial Reservado'
     : user?.username || 'Anónimo';
 
   // 1. Fetch REST message history

@@ -21,7 +21,7 @@ import { ENDPOINTS } from '../lib/api/endpoints';
 import { SseClient } from '../lib/api/sse';
 import { requestMediaPermissions } from '../lib/permissions';
 import { getPerlitaDelDia, getRandomPerlita } from '../lib/api/bible';
-import { getChaplainTeam } from '../lib/api/profiles';
+import { getChaplainTeam, getMyBasicProfile, updateMyBasicProfile } from '../lib/api/profiles';
 import type { Perlita } from '../types/bible';
 import type { Session, SessionType, CallIntake, ChaplainTeamMember } from '../types/api';
 import CallIntakeModal from '../components/duty/CallIntakeModal';
@@ -133,10 +133,31 @@ export default function BasicDashboard({
         console.warn('Error loading chaplain team:', err);
       });
 
+    // Fetch user basic profile to sync anonymity setting
+    getMyBasicProfile()
+      .then((profile) => {
+        if (isMounted && profile && typeof profile.isAnonymous === 'boolean') {
+          setIsAnonymous(profile.isAnonymous);
+        }
+      })
+      .catch(() => {
+        // Fallback default
+      });
+
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const handleToggleAnonymity = async () => {
+    const nextVal = !isAnonymous;
+    setIsAnonymous(nextVal);
+    try {
+      await updateMyBasicProfile({ isAnonymous: nextVal });
+    } catch (err) {
+      console.warn('[BasicDashboard] Failed to persist anonymity change:', err);
+    }
+  };
 
   const handleRandomPerlitaInDashboard = async () => {
     setIsLoadingPerlita(true);
@@ -365,10 +386,7 @@ export default function BasicDashboard({
       {/* 1. Primary Action Focus: Immediate Chaplain Dispatch Card */}
       <TacticalCard style={styles.dispatchCard} padding={18}>
         <View style={styles.dispatchHeader}>
-          <View style={styles.waitTimerPill}>
-            <Timer size={13} color={Theme.colors.onSurfaceVariant} />
-            <Text style={styles.waitTimerText}>&lt; 30 seg</Text>
-          </View>
+          
           <View style={styles.dispatchHeaderLeft}>
             <View style={styles.badgePriorityRow}>
               <ShieldCheck size={16} color={Theme.colors.secondary} />
@@ -395,7 +413,6 @@ export default function BasicDashboard({
                 <View style={styles.greenPulseDot} />
                 <Text style={styles.serenityBadgeText}>PAUSA DE GUARDIA</Text>
               </View>
-              <Sparkles size={16} color="#FFFFFF" />
             </View>
 
             <View style={styles.anchorBottomText}>
@@ -453,7 +470,7 @@ export default function BasicDashboard({
         {/* Stealth / Anonymous Mode Toggle Pill */}
         <TouchableOpacity
           style={styles.stealthToggle}
-          onPress={() => setIsAnonymous((prev) => !prev)}
+          onPress={handleToggleAnonymity}
           activeOpacity={0.8}
         >
           <View style={styles.stealthLeft}>
@@ -559,7 +576,7 @@ export default function BasicDashboard({
           <View style={styles.reflectionBadgeRow}>
             <Sparkles size={14} color={Theme.colors.secondary} />
             <Text style={styles.reflectionBadge}>
-              {isRandomPerlita ? 'PERLITA DEVOCIONAL ALEATORIA' : 'PERLITA DEL DÍA · FORTALEZA DEL GUARDIA'}
+              {isRandomPerlita ? 'PERLITA DEVOCIONAL ALEATORIA' : 'PERLITA DEL DÍA'}
             </Text>
           </View>
           {perlita?.date && (
@@ -581,13 +598,9 @@ export default function BasicDashboard({
             <View style={styles.reflectionFooter}>
               <View style={styles.widgetFooterTextCol}>
                 <Text style={styles.scriptureRef}>
-                  {perlita?.reference || 'Salmos 23:1'} · {perlita?.translation || 'PDDPT'}
+                  {perlita?.reference || 'Salmos 23:1'}
                 </Text>
-                {perlita?.attribution ? (
-                  <Text style={styles.widgetAttribution} numberOfLines={1}>
-                    {perlita.attribution}
-                  </Text>
-                ) : null}
+                
               </View>
 
               <View style={styles.widgetActionButtons}>
@@ -1032,7 +1045,7 @@ const styles = StyleSheet.create({
   },
   reflectionHeader: {
     gap: 4,
-    flexDirection: 'column',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,

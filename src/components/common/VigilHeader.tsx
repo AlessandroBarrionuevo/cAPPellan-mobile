@@ -22,7 +22,7 @@ interface VigilHeaderProps {
 }
 
 export function VigilHeader({
-  title = 'Vigil & Grace',
+  title = 'cAPPellan',
   subtitle = 'Servicio de Capellanía',
   sectionBadge,
   onBack,
@@ -54,8 +54,7 @@ export function VigilHeader({
             <Text style={styles.mainTitle}>{title}</Text>
             {sectionBadge ? (
               <>
-                <View style={styles.dotSeparator} />
-                <Text style={styles.badgeText}>{sectionBadge}</Text>
+                <Text style={styles.badgeText}></Text>
               </>
             ) : null}
           </View>
