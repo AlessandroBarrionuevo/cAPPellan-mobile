@@ -14,6 +14,8 @@ export interface BlogPostItem {
   authorId: number;
   authorName: string;
   authorRole: AppRole;
+  authorAvatarUrl?: string | null;
+  coverImageUrl?: string | null;
   tags: BlogTag[];
   likesCount: number;
   sharesCount: number;

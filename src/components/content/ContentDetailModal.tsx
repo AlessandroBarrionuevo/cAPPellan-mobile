@@ -8,7 +8,6 @@ import {
   Pressable,
   Image,
   Linking,
-  Share,
   ActivityIndicator,
   Alert,
 } from 'react-native';
@@ -16,7 +15,7 @@ import { Theme, globalStyles } from '../../theme/Theme';
 import {
   X,
   Heart,
-  Share2,
+  MessageCircle,
   ExternalLink,
   ShieldCheck,
   Headphones,
@@ -34,6 +33,7 @@ interface ContentDetailModalProps {
   content: ContentItem | null;
   onClose: () => void;
   onLikeChanged?: (id: number, newCount: number, liked: boolean) => void;
+  onOpenComments?: (content: ContentItem) => void;
 }
 
 export function ContentDetailModal({
@@ -41,6 +41,7 @@ export function ContentDetailModal({
   content: initialContent,
   onClose,
   onLikeChanged,
+  onOpenComments,
 }: ContentDetailModalProps) {
   const [content, setContent] = useState<ContentItem | null>(initialContent);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,18 +84,6 @@ export function ContentDetailModal({
       } else {
         Alert.alert('Aviso', 'No se puede abrir el enlace multimedia en este dispositivo.');
       }
-    } catch {
-      // Ignore
-    }
-  };
-
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        title: content.title,
-        message: `${content.title}\n\n${content.description}\n\n${content.mediaUrl}`,
-        url: content.mediaUrl,
-      });
     } catch {
       // Ignore
     }
@@ -271,9 +260,19 @@ export function ContentDetailModal({
               </Text>
             </Pressable>
 
-            <Pressable style={styles.shareButton} onPress={handleShare}>
-              <Share2 size={18} color={Theme.colors.secondary} />
-              <Text style={styles.shareButtonText}>Compartir</Text>
+            <Pressable
+              style={styles.commentButton}
+              onPress={() => {
+                onClose();
+                if (onOpenComments) {
+                  onOpenComments(content);
+                }
+              }}
+            >
+              <MessageCircle size={18} color={Theme.colors.secondary} />
+              <Text style={styles.commentButtonText}>
+                Comentarios ({content.commentsCount ?? 0})
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -525,7 +524,7 @@ const styles = StyleSheet.create({
   likeButtonTextActive: {
     color: '#DC2626',
   },
-  shareButton: {
+  commentButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -534,7 +533,7 @@ const styles = StyleSheet.create({
     borderRadius: Theme.roundness.full,
     backgroundColor: Theme.colors.surfaceContainerLow,
   },
-  shareButtonText: {
+  commentButtonText: {
     fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 13,
     color: Theme.colors.secondary,

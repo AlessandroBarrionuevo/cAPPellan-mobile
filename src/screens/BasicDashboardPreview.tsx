@@ -27,6 +27,11 @@ import {
   Share2,
   RefreshCw,
   AlertTriangle,
+  ArrowRight,
+  HeartHandshake,
+  Heart,
+  Plus,
+  Tv,
 } from 'lucide-react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { useCallStore } from '../lib/stores/call';
@@ -37,13 +42,24 @@ import { SseClient } from '../lib/api/sse';
 import { requestMediaPermissions } from '../lib/permissions';
 import { getPerlitaDelDia, getRandomPerlita } from '../lib/api/bible';
 import { getChaplainTeam, getMyBasicProfile, updateMyBasicProfile } from '../lib/api/profiles';
+import { fetchContents, toggleContentLike } from '../lib/api/content';
 import type { Perlita } from '../types/bible';
-import type { Session, SessionType, CallIntake, ChaplainTeamMember, BasicProfile } from '../types/api';
+import type {
+  Session,
+  SessionType,
+  CallIntake,
+  ChaplainTeamMember,
+  BasicProfile,
+  ContentItem,
+} from '../types/api';
+import type { Prayer, PaginatedPrayersResponse } from '../types/prayer';
 import CallIntakeModal from '../components/duty/CallIntakeModal';
 import { TacticalCard, TacticalButton, ConfidentialityBanner } from '../components/common';
 import { useAppInsets } from '../lib/safeArea';
 import { StatusBar } from 'expo-status-bar';
 import BasicDashboard from './BasicDashboard';
+import { TimelinePrayerCard } from '../components/prayer/TimelinePrayerCard';
+import { ModernSocialContentCard, ContentCommentsModal } from '../components/content';
 
 interface BasicDashboardPreviewProps {
   onJoinCall: () => void;
@@ -84,6 +100,84 @@ const CHAPLAIN_ROSTER = [
   },
 ];
 
+const FALLBACK_DASHBOARD_PRAYERS: Prayer[] = [
+  {
+    id: 101,
+    title: 'Personal en Frontera Norte',
+    description: 'Pedimos cobertura, fortaleza espiritual y protección para los efectivos en patrulla y sus familias.',
+    content: ['Personal en despliegue operativo', 'Protección y paz en el hogar'],
+    authorName: 'Oficial Reservado',
+    isAnonymous: true,
+    prayerCount: 24,
+    commentCount: 6,
+    createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
+  },
+  {
+    id: 102,
+    title: 'Recuperación de Salud',
+    description: 'Petición de intercesión por la pronta recuperación del Sargento Morales tras intervención médica.',
+    content: ['Salud y restauración física'],
+    authorName: 'Suboficial R. Gómez',
+    isAnonymous: false,
+    prayerCount: 42,
+    commentCount: 11,
+    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+  },
+  {
+    id: 103,
+    title: 'Paz y Templanza en Guardia',
+    description: 'Por sabiduría, discernimiento y serenidad para todos los camaradas de turno este fin de semana.',
+    content: ['Serenidad en el servicio', 'Fortaleza moral'],
+    authorName: 'Camarada en Servicio',
+    isAnonymous: true,
+    prayerCount: 19,
+    commentCount: 4,
+    createdAt: new Date(Date.now() - 3600000 * 14).toISOString(),
+  },
+];
+
+const FALLBACK_DASHBOARD_CONTENTS: ContentItem[] = [
+  {
+    id: 201,
+    title: 'Episodio 14: Fortaleza y Resiliencia en el Deber',
+    description: 'Reflexión pastoral sobre la templanza espiritual en situaciones de alta presión y servicio abnegado.',
+    mediaUrl: 'https://open.spotify.com/episode/3ZcyXfVn2e5h1p6z8Q1v9m',
+    type: 'SPOTIFY',
+    authorId: 1,
+    likesCount: 58,
+    commentsCount: 14,
+    isLikedByMe: false,
+    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+  },
+  {
+    id: 202,
+    title: 'Ceremonia de Bendición y Palabras de Aliento',
+    description: 'Acompañamiento pastoral a los cuadros y familias. Mensaje de esperanza y vocación militar.',
+    mediaUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    type: 'YOUTUBE',
+    authorId: 2,
+    likesCount: 124,
+    commentsCount: 32,
+    isLikedByMe: true,
+    createdAt: new Date(Date.now() - 3600000 * 18).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 18).toISOString(),
+  },
+  {
+    id: 203,
+    title: 'Paz en la Tormenta: Reflexión Visual',
+    description: '«No temas, porque yo estoy contigo; no desmayes, porque yo soy tu Dios que te esfuerzo.» Isaías 41:10.',
+    mediaUrl: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&q=80&w=800',
+    type: 'IMAGE',
+    authorId: 3,
+    likesCount: 89,
+    commentsCount: 19,
+    isLikedByMe: false,
+    createdAt: new Date(Date.now() - 3600000 * 32).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000 * 32).toISOString(),
+  },
+];
+
 export default function BasicDashboardPreview({
   onJoinCall,
   onJoinChat,
@@ -102,6 +196,16 @@ export default function BasicDashboardPreview({
   // User Authentication & Profile
   const authUser = useAuthStore((state) => state.user);
   const [basicProfile, setBasicProfile] = useState<BasicProfile | null>(null);
+
+  // Community Prayer Wall Widget State
+  const [prayersList, setPrayersList] = useState<Prayer[]>(FALLBACK_DASHBOARD_PRAYERS);
+  const [isLoadingPrayers, setIsLoadingPrayers] = useState(false);
+  const [prayedIds, setPrayedIds] = useState<Set<number>>(new Set());
+
+  // Multimedia & Content State
+  const [contentList, setContentList] = useState<ContentItem[]>(FALLBACK_DASHBOARD_CONTENTS);
+  const [isLoadingContents, setIsLoadingContents] = useState(false);
+  const [activeContentForComments, setActiveContentForComments] = useState<ContentItem | null>(null);
 
   // Dynamic Perlita State
   const [perlita, setPerlita] = useState<Perlita | null>(null);
@@ -156,12 +260,82 @@ export default function BasicDashboardPreview({
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
+
+    setIsLoadingPrayers(true);
+    request<PaginatedPrayersResponse>(`${ENDPOINTS.PRAYERS}?page=0&size=5`)
+      .then((res) => {
+        if (isMounted && res && Array.isArray(res.content) && res.content.length > 0) {
+          setPrayersList(res.content.slice(0, 3));
+        }
+      })
+      .catch((err) => {
+        console.warn('Error loading prayers in preview:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingPrayers(false);
+      });
+
+    setIsLoadingContents(true);
+    fetchContents()
+      .then((items) => {
+        if (isMounted && Array.isArray(items) && items.length > 0) {
+          setContentList(items.slice(0, 3));
+        }
+      })
+      .catch((err) => {
+        console.warn('Error loading contents in preview dashboard:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingContents(false);
+      });
 
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const handlePrayInDashboard = async (prayerId: number) => {
+    if (prayedIds.has(prayerId)) return;
+    setPrayedIds((prev) => new Set(prev).add(prayerId));
+    setPrayersList((prev) =>
+      prev.map((p) => (p.id === prayerId ? { ...p, prayerCount: p.prayerCount + 1 } : p))
+    );
+    try {
+      await request(ENDPOINTS.PRAYER_PRAY(prayerId), { method: 'POST' });
+    } catch {
+      // Ignored for optimistic responsiveness
+    }
+  };
+
+  const handleLikeContentInDashboard = async (contentId: number) => {
+    setContentList((prev) =>
+      prev.map((item) => {
+        if (item.id === contentId) {
+          const nextLiked = !item.isLikedByMe;
+          return {
+            ...item,
+            isLikedByMe: nextLiked,
+            likesCount: nextLiked ? item.likesCount + 1 : Math.max(0, item.likesCount - 1),
+          };
+        }
+        return item;
+      })
+    );
+
+    try {
+      const res = await toggleContentLike(contentId);
+      setContentList((prev) =>
+        prev.map((item) =>
+          item.id === contentId
+            ? { ...item, isLikedByMe: res.liked, likesCount: res.likesCount }
+            : item
+        )
+      );
+    } catch (err) {
+      console.warn('[BasicDashboardPreview] Failed to toggle like on content:', err);
+    }
+  };
 
   const handleToggleAnonymity = async () => {
     const nextVal = !isAnonymous;
@@ -451,54 +625,69 @@ export default function BasicDashboardPreview({
             style={[
               styles.bannerCutoutCard,
               {
-                width: bannerWidth,
+                width: 340,
                 height: bannerHeight,
               },
+
             ]}
           >
             {/* Cutout Image with Custom Inward Curves */}
             <Image
-              source={require('../../assets/bannerV1.png')}
+              source={require('../../assets/bannerV2.png')}
               style={styles.bannerCutoutImage}
               resizeMode="cover"
             />
 
-            {/* Minimal Overlay for optimal text readability */}
-            <View style={styles.bannerMinimalOverlay} />
-
             {/* Centered Typography: Medium Title & Subtitle */}
             <View style={styles.bannerCenteredContent}>
-              <Text style={styles.bannerMediumTitle}>Te escuchamos</Text>
+              <Text style={styles.bannerMediumTitle}>Comunicate</Text>
               <Text style={styles.bannerCenteredSubtitle}>
-                Estamos para vos en todo momento y lugar.
+                Estamos para vos en todo momento.
               </Text>
             </View>
 
-            {/* Bottom-Left Circular Button: Videollamada */}
-            <TouchableOpacity
-              style={styles.bottomLeftCircleBtn}
-              onPress={() => {
-                setSelectedType('VIDEO');
-                setShowIntakeModal(true);
-              }}
-              activeOpacity={0.85}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Video size={22} color="#FFFFFF" strokeWidth={2.4} />
-            </TouchableOpacity>
+            {/* Pill Action Buttons (Search-bar design: White background, blue circle with arrow) */}
+            <View style={styles.bannerPillButtonsRow}>
+              {/* Videollamada Pill Button */}
+              <TouchableOpacity
+                style={styles.actionPillButton}
+                onPress={() => {
+                  setSelectedType('VIDEO');
+                  setShowIntakeModal(true);
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.pillLeftContent}>
+                  <View style={styles.pillBlueCircle}>
+                    <Video size={20} color="#FFFFFF" strokeWidth={2.2} />
+                  </View>
+                  <Text style={styles.pillButtonLabel} numberOfLines={1}>
+                    Llamar
+                  </Text>
+                </View>
 
-            {/* Bottom-Right Circular Button: Chat */}
-            <TouchableOpacity
-              style={styles.bottomRightCircleBtn}
-              onPress={() => {
-                setSelectedType('CHAT');
-                setShowIntakeModal(true);
-              }}
-              activeOpacity={0.85}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <MessageSquare size={21} color="#FFFFFF" strokeWidth={2.4} />
-            </TouchableOpacity>
+              </TouchableOpacity>
+
+              {/* Chat Pill Button */}
+              <TouchableOpacity
+                style={styles.actionPillButton}
+                onPress={() => {
+                  setSelectedType('CHAT');
+                  setShowIntakeModal(true);
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.pillLeftContent}>
+                  <View style={styles.pillBlueCircle}>
+                    <MessageSquare size={20} color="#FFFFFF" strokeWidth={2.2} />
+                  </View>
+                  <Text style={styles.pillButtonLabel} numberOfLines={1}>
+                    Chat
+                  </Text>
+                </View>
+
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -551,10 +740,166 @@ export default function BasicDashboardPreview({
             </View>
           </TouchableOpacity>
 
-          {/* 2. Direct Selection: Roster of Chaplains in Guard */}
+          {/* 2. Daily Devotional: Perlita del Día Widget */}
+          <TacticalCard style={styles.reflectionCard} padding={16}>
+            <View style={styles.reflectionHeader}>
+              <View style={styles.reflectionBadgeRow}>
+                <Sparkles size={14} color={Theme.colors.secondary} />
+                <Text style={styles.reflectionBadge}>
+                  {isRandomPerlita ? 'PERLITA DEVOCIONAL ALEATORIA' : 'PERLITA DEL DÍA'}
+                </Text>
+              </View>
+              {perlita?.date && (
+                <Text style={styles.reflectionToday}>{perlita.date}</Text>
+              )}
+            </View>
+
+            {isLoadingPerlita ? (
+              <View style={styles.widgetLoading}>
+                <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
+                <Text style={styles.widgetLoadingText}>Cargando versículo del día...</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.quoteText}>
+                  “{perlita?.text || 'Yavé es mi Pastor. Nada me faltará.'}”
+                </Text>
+
+                <View style={styles.reflectionFooter}>
+                  <View style={styles.widgetFooterTextCol}>
+                    <Text style={styles.scriptureRef}>
+                      {perlita?.reference || 'Salmos 23:1'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.widgetActionButtons}>
+                    <TouchableOpacity
+                      style={styles.widgetIconBtn}
+                      onPress={handleRandomPerlitaInDashboard}
+                      activeOpacity={0.8}
+                      accessibilityLabel="Generar perlita aleatoria"
+                    >
+                      <RefreshCw size={14} color={Theme.colors.tacticalNavy} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.widgetIconBtn}
+                      onPress={handleSharePerlitaInDashboard}
+                      activeOpacity={0.8}
+                      accessibilityLabel="Compartir versículo"
+                    >
+                      <Share2 size={14} color={Theme.colors.tacticalNavy} />
+                    </TouchableOpacity>
+
+                    {onNavigateToBible && (
+                      <TouchableOpacity
+                        style={styles.widgetBibleBtn}
+                        onPress={onNavigateToBible}
+                        activeOpacity={0.8}
+                      >
+                        <BookOpen size={13} color="#FFFFFF" />
+                        <Text style={styles.widgetBibleBtnText}>Leer</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </>
+            )}
+          </TacticalCard>
+
+          {/* 3. Community Intercession: Muro de Oración Widget */}
+          <View style={styles.prayerWidgetSection}>
+            <View style={styles.prayerSectionHeader}>
+              <View style={styles.prayerSectionTitleCol}>
+                <View style={styles.prayerBadgeRow}>
+                  <HeartHandshake size={14} color="#0c7ae0" />
+                  <Text style={styles.prayerBadgeText}>COMUNIDAD EN ORACIÓN</Text>
+                </View>
+                <Text style={styles.prayerSectionTitle}>Muro de Oración</Text>
+              </View>
+              <Text style={styles.prayerCountBadge}>3 ACTIVAS</Text>
+            </View>
+
+            {/* Timeline Prayer Cards List (using TimelinePrayerCard design) */}
+            <View style={styles.prayerTimelineList}>
+              {prayersList.slice(0, 3).map((item, index) => {
+                const isJoined = prayedIds.has(item.id);
+                return (
+                  <TimelinePrayerCard
+                    key={item.id}
+                    item={item}
+                    index={index}
+                    isJoined={isJoined}
+                    onPray={handlePrayInDashboard}
+                    onPressCard={onNavigateToPrayers}
+                    onOpenComments={onNavigateToPrayers}
+                    showConnector={index < Math.min(prayersList.length, 3) - 1}
+                  />
+                );
+              })}
+            </View>
+
+            {/* '+ Ver más' button using timelineAddBtnRow format */}
+            {onNavigateToPrayers && (
+              <TouchableOpacity
+                style={styles.timelineAddBtnRow}
+                onPress={onNavigateToPrayers}
+                activeOpacity={0.8}
+              >
+                <View style={styles.timelineAddCircle}>
+                  <Plus size={14} color={Theme.colors.primary} strokeWidth={2.5} />
+                </View>
+                <Text style={styles.timelineAddLabel}>Ver más</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* 4. Multimedia & Reflections: Content Widget */}
+          <View style={styles.contentWidgetSection}>
+            <View style={styles.contentSectionHeader}>
+              <View style={styles.contentSectionTitleCol}>
+                <View style={styles.contentBadgeRow}>
+                  <Tv size={14} color="#0c7ae0" />
+                  <Text style={styles.contentBadgeText}>MULTIMEDIA & REFLEXIONES</Text>
+                </View>
+                <Text style={styles.contentSectionTitle}>Contenidos Destacados</Text>
+              </View>
+              <Text style={styles.contentCountBadge}>3 DESTACADOS</Text>
+            </View>
+
+            {/* List of 3 Content Cards */}
+            <View style={styles.contentCardsList}>
+              {contentList.slice(0, 3).map((item) => (
+                <View key={item.id} style={styles.contentCardItemWrapper}>
+                  <ModernSocialContentCard
+                    content={item}
+                    onLikeToggle={handleLikeContentInDashboard}
+                    onOpenDetail={() => onNavigateToContent?.()}
+                    onOpenComments={setActiveContentForComments}
+                  />
+                </View>
+              ))}
+            </View>
+
+            {/* '+ Ver más' button using timelineAddBtnRow format */}
+            {onNavigateToContent && (
+              <TouchableOpacity
+                style={styles.timelineAddBtnRow}
+                onPress={onNavigateToContent}
+                activeOpacity={0.8}
+              >
+                <View style={styles.timelineAddCircle}>
+                  <Plus size={14} color={Theme.colors.primary} strokeWidth={2.5} />
+                </View>
+                <Text style={styles.timelineAddLabel}>Ver más contenidos</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* 5. Direct Selection: Roster of Chaplains in Guard */}
           <View style={styles.rosterSection}>
             <View style={styles.rosterSectionHeader}>
-              <Text style={styles.rosterSectionTitle}>Nuestros Capellanes</Text>
+              <Text style={styles.rosterSectionTitle}>Nuestros Capellaness</Text>
               <Text style={styles.rosterSectionBadge}>
                 {chaplainTeam.length > 0 ? `${chaplainTeam.length} EN EQUIPO` : '3 DISPONIBLES'}
               </Text>
@@ -638,74 +983,7 @@ export default function BasicDashboardPreview({
             </View>
           </View>
 
-          {/* 3. Daily Devotional: Perlita del Día Widget */}
-          <TacticalCard style={styles.reflectionCard} padding={16}>
-            <View style={styles.reflectionHeader}>
-              <View style={styles.reflectionBadgeRow}>
-                <Sparkles size={14} color={Theme.colors.secondary} />
-                <Text style={styles.reflectionBadge}>
-                  {isRandomPerlita ? 'PERLITA DEVOCIONAL ALEATORIA' : 'PERLITA DEL DÍA'}
-                </Text>
-              </View>
-              {perlita?.date && (
-                <Text style={styles.reflectionToday}>{perlita.date}</Text>
-              )}
-            </View>
-
-            {isLoadingPerlita ? (
-              <View style={styles.widgetLoading}>
-                <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
-                <Text style={styles.widgetLoadingText}>Cargando versículo del día...</Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.quoteText}>
-                  “{perlita?.text || 'Yavé es mi Pastor. Nada me faltará.'}”
-                </Text>
-
-                <View style={styles.reflectionFooter}>
-                  <View style={styles.widgetFooterTextCol}>
-                    <Text style={styles.scriptureRef}>
-                      {perlita?.reference || 'Salmos 23:1'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.widgetActionButtons}>
-                    <TouchableOpacity
-                      style={styles.widgetIconBtn}
-                      onPress={handleRandomPerlitaInDashboard}
-                      activeOpacity={0.8}
-                      accessibilityLabel="Generar perlita aleatoria"
-                    >
-                      <RefreshCw size={14} color={Theme.colors.tacticalNavy} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.widgetIconBtn}
-                      onPress={handleSharePerlitaInDashboard}
-                      activeOpacity={0.8}
-                      accessibilityLabel="Compartir versículo"
-                    >
-                      <Share2 size={14} color={Theme.colors.tacticalNavy} />
-                    </TouchableOpacity>
-
-                    {onNavigateToBible && (
-                      <TouchableOpacity
-                        style={styles.widgetBibleBtn}
-                        onPress={onNavigateToBible}
-                        activeOpacity={0.8}
-                      >
-                        <BookOpen size={13} color="#FFFFFF" />
-                        <Text style={styles.widgetBibleBtnText}>Leer</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </>
-            )}
-          </TacticalCard>
-
-          {/* 4. Confidentiality Protocol & Crisis Helpline Link */}
+          {/* 6. Confidentiality Protocol & Crisis Helpline Link */}
           <ConfidentialityBanner
             title="Secreto de Confesión & Sigilo Total"
             description="Protegido por normativa canónica, ética pastoral y estricta confidencialidad."
@@ -723,6 +1001,23 @@ export default function BasicDashboardPreview({
         onSubmit={async (intake?: CallIntake) => {
           setShowIntakeModal(false);
           await handleStartCall(selectedType, intake);
+        }}
+      />
+
+      {/* CONTENT COMMENTS MODAL */}
+      <ContentCommentsModal
+        visible={Boolean(activeContentForComments)}
+        content={activeContentForComments}
+        onClose={() => setActiveContentForComments(null)}
+        onCommentAdded={(contentId, newCount) => {
+          setContentList((prev) =>
+            prev.map((c) => (c.id === contentId ? { ...c, commentsCount: newCount } : c))
+          );
+          if (activeContentForComments && activeContentForComments.id === contentId) {
+            setActiveContentForComments((prev) =>
+              prev ? { ...prev, commentsCount: newCount } : null
+            );
+          }
         }}
       />
     </>
@@ -779,7 +1074,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingBottom: 8,
+    marginBottom: 10,
   },
   topHeaderUserRow: {
     flexDirection: 'row',
@@ -848,8 +1143,8 @@ const styles = StyleSheet.create({
   bannerCutoutCard: {
     alignSelf: 'center',
     position: 'relative',
-    marginTop: 16,
-    marginBottom: 32,
+    marginTop: 24,
+    marginBottom: 64,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -859,30 +1154,23 @@ const styles = StyleSheet.create({
   bannerCutoutImage: {
     width: '100%',
     height: '130%',
-  },
-  bannerMinimalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '75%',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
   },
   bannerCenteredContent: {
+    width: '70%',
     position: 'absolute',
-    top: 0,
-    left: 0,
+    top: 60,
+    left: -10,
     right: 0,
-    bottom: '22%',
+    bottom: 0,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
   },
   bannerMediumTitle: {
     fontFamily: Theme.fonts.headline,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -893,51 +1181,63 @@ const styles = StyleSheet.create({
   },
   bannerCenteredSubtitle: {
     ...globalStyles.bodySm,
-    fontSize: 12.5,
+    fontSize: 16,
     lineHeight: 16,
     color: '#FFFFFF',
     fontWeight: '600',
-    textAlign: 'center',
+    textAlign: 'left',
     marginTop: 4,
     textShadowColor: 'rgba(0, 0, 0, 0.85)',
     textShadowOffset: { width: 0, height: 1.5 },
     textShadowRadius: 4,
   },
-  bottomLeftCircleBtn: {
+  bannerPillButtonsRow: {
     position: 'absolute',
-    bottom: 2,
+    bottom: -70, //-70 para que quede medio al borde y -44 para que quede en el tope de abajo
     left: 8,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#0c7ae0',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 6,
-  },
-  bottomRightCircleBtn: {
-    position: 'absolute',
-    bottom: 2,
     right: 8,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 20,
+    marginBottom: 0,
+  },
+  actionPillButton: {
+    flex: 1,
+    height: 43,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 0,
+    paddingRight: 5,
+    borderColor: 'black',
+    borderRightWidth: 0,
+    borderLeftWidth: 1,
+    borderTopWidth: 1,
+  },
+  pillLeftContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  pillButtonLabel: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F2438',
+    letterSpacing: 0.8,
+  },
+  pillBlueCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#0c7ae0',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 6,
+
   },
 
   // 2. DASHBOARD WIDGETS
@@ -1132,6 +1432,155 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.tacticalNavy,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // 3. Muro de Oración Widget
+  prayerWidgetSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    gap: 12,
+  },
+  prayerSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  prayerSectionTitleCol: {
+    gap: 2,
+  },
+  prayerBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  prayerBadgeText: {
+    ...globalStyles.labelCaps,
+    color: '#0c7ae0',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  prayerSectionTitle: {
+    fontFamily: Theme.fonts.headline,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F2438',
+    letterSpacing: -0.3,
+  },
+  prayerCountBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0c7ae0',
+    backgroundColor: '#EBF5FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  prayerTimelineList: {
+    marginTop: 4,
+  },
+  timelineAddBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 4,
+    paddingVertical: 8,
+    gap: 10,
+  },
+  timelineAddCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Theme.colors.primary,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  timelineAddLabel: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 14,
+    color: Theme.colors.primary,
+    letterSpacing: 0.2,
+  },
+
+  // 4. Multimedia & Reflections: Content Widget
+  contentWidgetSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    gap: 12,
+  },
+  contentSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  contentSectionTitleCol: {
+    gap: 2,
+  },
+  contentBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contentBadgeText: {
+    ...globalStyles.labelCaps,
+    color: '#0c7ae0',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  contentSectionTitle: {
+    fontFamily: Theme.fonts.headline,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F2438',
+    letterSpacing: -0.3,
+  },
+  contentCountBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0c7ae0',
+    backgroundColor: '#EBF5FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  contentCardsList: {
+    gap: 16,
+  },
+  contentCardItemWrapper: {
+    width: '100%',
   },
 
   // Perlita del Día Card

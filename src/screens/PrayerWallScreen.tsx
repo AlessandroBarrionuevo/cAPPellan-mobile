@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   Modal,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { request } from '../lib/api/client';
@@ -26,6 +27,7 @@ import type {
   CreatePrayerRequest,
   PrayerComment,
 } from '../types/prayer';
+import { TimelinePrayerCard } from '../components/prayer/TimelinePrayerCard';
 import {
   TacticalCard,
   TacticalButton,
@@ -133,6 +135,7 @@ interface ClassicPrayerCardProps {
   onPray: (id: number) => void;
   onShare: (item: Prayer) => void;
   onOpenComments: (item: Prayer) => void;
+  onPressCard?: (item: Prayer) => void;
 }
 
 export const ClassicPrayerCard = React.memo(function ClassicPrayerCard({
@@ -141,33 +144,42 @@ export const ClassicPrayerCard = React.memo(function ClassicPrayerCard({
   onPray,
   onShare,
   onOpenComments,
+  onPressCard,
 }: ClassicPrayerCardProps) {
   return (
     <TacticalCard style={styles.prayerCard} variant="accentBorder" padding={14}>
-      <View style={styles.prayerCardHeader}>
-        <View style={styles.authorRow}>
-          <View style={styles.authorAvatar}>
-            <User size={15} color={Theme.colors.tacticalNavy} />
+      <TouchableOpacity
+        activeOpacity={onPressCard ? 0.85 : 1}
+        onPress={() => onPressCard?.(item)}
+      >
+        <View style={styles.prayerCardHeader}>
+          <View style={styles.authorRow}>
+            <View style={styles.authorAvatar}>
+              <User size={15} color={Theme.colors.tacticalNavy} />
+            </View>
+            <View style={styles.authorCol}>
+              <Text style={styles.authorName}>
+                {item.isAnonymous ? 'Oficial Reservado' : item.authorName}
+              </Text>
+              <Text style={styles.authorTime}>
+                {new Date(item.createdAt).toLocaleDateString('es-AR')} • En Cobertura
+              </Text>
+            </View>
           </View>
-          <View style={styles.authorCol}>
-            <Text style={styles.authorName}>
-              {item.isAnonymous ? 'Oficial Reservado' : item.authorName}
-            </Text>
-            <Text style={styles.authorTime}>
-              {new Date(item.createdAt).toLocaleDateString('es-AR')} • En Cobertura
-            </Text>
-          </View>
+
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onShare(item);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Share2 size={16} color={Theme.colors.secondary} />
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={() => onShare(item)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Share2 size={16} color={Theme.colors.secondary} />
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.prayerDescription}>{item.description}</Text>
+        <Text style={styles.prayerDescription}>{item.description}</Text>
+      </TouchableOpacity>
 
       <View style={styles.prayerCardActions}>
         <TouchableOpacity
@@ -212,7 +224,9 @@ export const ClassicPrayerCard = React.memo(function ClassicPrayerCard({
           activeOpacity={0.8}
         >
           <MessageSquare size={15} color={Theme.colors.tacticalNavy} />
-          <Text style={styles.commentActionText}>Aliento & Oración</Text>
+          <Text style={styles.commentActionText}>
+            {item.commentCount ? `Aliento (${item.commentCount})` : 'Aliento & Oración'}
+          </Text>
         </TouchableOpacity>
       </View>
     </TacticalCard>
@@ -220,138 +234,9 @@ export const ClassicPrayerCard = React.memo(function ClassicPrayerCard({
 });
 
 // ============================================================================
-// 2. NEW TIMELINE PRAYER CARD COMPONENT (DESIGN REFERENCE MATCH)
+// 2. TIMELINE PRAYER CARD COMPONENT (RE-EXPORTED FROM SHARED COMPONENT)
 // ============================================================================
-interface TimelinePrayerCardProps {
-  item: Prayer;
-  index: number;
-  isJoined: boolean;
-  onPray: (id: number) => void;
-  onOpenComments: (item: Prayer) => void;
-}
-
-export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
-  item,
-  index,
-  isJoined,
-  onPray,
-  onOpenComments,
-}: TimelinePrayerCardProps) {
-  const displayTitle =
-    item.title && !item.title.endsWith('...')
-      ? item.title
-      : item.isAnonymous
-      ? 'Petición en Cobertura'
-      : `Petición de ${item.authorName || 'Camarada'}`;
-
-  const authorSubtitle = `${item.isAnonymous ? 'Oficial Reservado' : (item.authorName || 'Camarada')} • En Cobertura`;
-  const dateFormatted = `${new Date(item.createdAt).toLocaleDateString('es-AR')} • Activa`;
-
-  // Bullets: description + date (or custom content if present)
-  const bulletItems = useMemo(() => {
-    if (Array.isArray(item.content) && item.content.length > 0) {
-      return item.content;
-    }
-    const lines: string[] = [];
-    if (item.description) {
-      lines.push(item.description);
-    }
-    lines.push(dateFormatted);
-    return lines;
-  }, [item, dateFormatted]);
-
-  return (
-    <View style={styles.timelineRow}>
-      {/* 1. Left Column: Compact Blue Number Circle + Connector Line (No 'Petición' label) */}
-      <View style={styles.timelineCol}>
-        <View style={styles.timelineCircle}>
-          <Text style={styles.timelineNumberText}>{index + 1}</Text>
-        </View>
-
-        {/* Vertical connector line with arrow to next item */}
-        <View style={styles.timelineConnectorWrap}>
-          <View style={styles.timelineConnectorLine} />
-          <View style={styles.timelineArrowBadge}>
-            <ChevronDown size={10} color="#94A3B8" />
-          </View>
-          <View style={styles.timelineConnectorLine} />
-        </View>
-      </View>
-
-      {/* 2. Right Column: White Rounded Card with Harmonious Titles & Stacked Action Buttons */}
-      <View style={styles.timelineCard}>
-        {/* Main Card Content */}
-        <View style={styles.timelineCardBody}>
-          {/* Harmonious Header: Title + Author Subtitle (No star icon) */}
-          <View style={styles.timelineCardHeader}>
-            <View style={styles.timelineTitleCol}>
-              <Text style={styles.timelineCardTitle} numberOfLines={1}>
-                {displayTitle}
-              </Text>
-              <Text style={styles.timelineCardAuthorSub}>
-                {authorSubtitle}
-              </Text>
-            </View>
-          </View>
-
-          {/* Bullet Points */}
-          <View style={styles.timelineBulletsList}>
-            {bulletItems.map((bullet, idx) => (
-              <View key={idx} style={styles.timelineBulletRow}>
-                <Text style={styles.timelineBulletDot}>•</Text>
-                <Text
-                  style={[
-                    styles.timelineBulletText,
-                    idx === 0 && styles.timelineBulletTextPrimary,
-                  ]}
-                  numberOfLines={idx === 0 ? 3 : 1}
-                >
-                  {bullet}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* 3. Stacked Right Buttons: Heart above, Comment below */}
-        <View style={styles.timelineActionCol}>
-          {/* Top Button: Heart / Me gusta */}
-          <TouchableOpacity
-            style={[
-              styles.timelineHeartBtn,
-              isJoined && styles.timelineHeartBtnActive,
-            ]}
-            onPress={() => onPray(item.id)}
-            activeOpacity={0.75}
-          >
-            <Heart
-              size={17}
-              color={isJoined ? '#EF4444' : '#64748B'}
-              fill={isJoined ? '#EF4444' : 'transparent'}
-            />
-            <Text
-              style={[
-                styles.timelineActionCount,
-                isJoined && styles.timelineActionCountActive,
-              ]}
-            >
-              {item.prayerCount}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Bottom Button: Comment */}
-          <TouchableOpacity
-            style={styles.timelineCommentBtn}
-            onPress={() => onOpenComments(item)}
-            activeOpacity={0.75}
-          >
-            <MessageSquare size={17} color={Theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-});
+export { TimelinePrayerCard } from '../components/prayer/TimelinePrayerCard';
 
 // ============================================================================
 // 3. MAIN PRAYER WALL SCREEN
@@ -374,6 +259,9 @@ export default function PrayerWallScreen() {
   const [pedirText, setPedirText] = useState('');
   const [pedirAnonymous, setPedirAnonymous] = useState(false);
   const [isSubmittingPedir, setIsSubmittingPedir] = useState(false);
+
+  // Prayer Detail Modal State (When Card is tapped)
+  const [selectedPrayerDetail, setSelectedPrayerDetail] = useState<Prayer | null>(null);
 
   // Joined prayers set for optimistic updates
   const [joinedIds, setJoinedIds] = useState<Set<number>>(new Set());
@@ -406,6 +294,19 @@ export default function PrayerWallScreen() {
       const created = await addPrayerComment(activePrayerForComments.id, commentText.trim());
       setComments((prev) => [...prev, created]);
       setCommentText('');
+      // Optimistically update comment count in list and detail
+      setPrayers((prev) =>
+        prev.map((p) =>
+          p.id === activePrayerForComments.id
+            ? { ...p, commentCount: (p.commentCount ?? 0) + 1 }
+            : p
+        )
+      );
+      setSelectedPrayerDetail((prev) =>
+        prev && prev.id === activePrayerForComments.id
+          ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 }
+          : prev
+      );
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'No se pudo publicar la palabra de aliento.');
     } finally {
@@ -448,6 +349,9 @@ export default function PrayerWallScreen() {
     setPrayers((prev) =>
       prev.map((p) => (p.id === prayerId ? { ...p, prayerCount: p.prayerCount + 1 } : p))
     );
+    setSelectedPrayerDetail((prev) =>
+      prev && prev.id === prayerId ? { ...prev, prayerCount: prev.prayerCount + 1 } : prev
+    );
 
     try {
       await request<Prayer>(ENDPOINTS.PRAYER_PRAY(prayerId), {
@@ -462,6 +366,9 @@ export default function PrayerWallScreen() {
       });
       setPrayers((prev) =>
         prev.map((p) => (p.id === prayerId ? { ...p, prayerCount: p.prayerCount - 1 } : p))
+      );
+      setSelectedPrayerDetail((prev) =>
+        prev && prev.id === prayerId ? { ...prev, prayerCount: prev.prayerCount - 1 } : prev
       );
     }
   };
@@ -635,6 +542,7 @@ export default function PrayerWallScreen() {
             onPray={handlePray}
             onShare={handleShare}
             onOpenComments={handleOpenComments}
+            onPressCard={(p) => setSelectedPrayerDetail(p)}
           />
         );
       }
@@ -646,6 +554,7 @@ export default function PrayerWallScreen() {
           isJoined={isJoined}
           onPray={handlePray}
           onOpenComments={handleOpenComments}
+          onPressCard={(p) => setSelectedPrayerDetail(p)}
         />
       );
     },
@@ -689,7 +598,10 @@ export default function PrayerWallScreen() {
         animationType="slide"
         onRequestClose={() => setShowPedirModal(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
           <View style={[styles.newPrayerModalCard, globalStyles.shadowMd]}>
             <View style={styles.modalHeader}>
               <View>
@@ -721,9 +633,10 @@ export default function PrayerWallScreen() {
               placeholder="Escribe tu petición de oración o motivo de intercesión..."
               placeholderTextColor="#94A3B8"
               multiline
-              numberOfLines={4}
+              numberOfLines={6}
               value={pedirText}
               onChangeText={setPedirText}
+              textAlignVertical="top"
             />
 
             <View style={styles.modalActionRow}>
@@ -753,6 +666,136 @@ export default function PrayerWallScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* FULL PRAYER DETAIL MODAL (WHEN CARD IS TAPPED) */}
+      <Modal
+        visible={Boolean(selectedPrayerDetail)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedPrayerDetail(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.detailModalCard, globalStyles.shadowMd]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <View style={styles.detailBadgeRow}>
+                  <HeartHandshake size={14} color="#0c7ae0" />
+                  <Text style={styles.detailBadgeText}>PETICIÓN EN COBERTURA</Text>
+                </View>
+                <Text style={styles.modalTitle} numberOfLines={2}>
+                  {selectedPrayerDetail?.title || 'Petición Comunitaria'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedPrayerDetail(null)}
+                style={styles.modalCloseBtn}
+              >
+                <X size={20} color={Theme.colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.detailModalScroll} showsVerticalScrollIndicator={false}>
+              <View style={styles.detailAuthorCard}>
+                <View style={styles.detailAuthorAvatar}>
+                  <Text style={styles.detailAuthorAvatarText}>
+                    {(selectedPrayerDetail?.authorName || 'O')[0].toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailAuthorName}>
+                    {selectedPrayerDetail?.isAnonymous
+                      ? 'Oficial Reservado'
+                      : selectedPrayerDetail?.authorName || 'Camarada en Servicio'}
+                  </Text>
+                  <Text style={styles.detailAuthorDate}>
+                    {selectedPrayerDetail?.createdAt
+                      ? new Date(selectedPrayerDetail.createdAt).toLocaleDateString('es-AR', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })
+                      : 'Activa'}{' '}
+                    • Amparo Pastoral
+                  </Text>
+                </View>
+                <View style={styles.detailActiveBadge}>
+                  <Text style={styles.detailActiveBadgeText}>ACTIVA</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailBodyBox}>
+                <Text style={styles.detailBodyText}>
+                  {selectedPrayerDetail?.description}
+                </Text>
+              </View>
+
+              {Array.isArray(selectedPrayerDetail?.content) &&
+                selectedPrayerDetail.content.length > 0 && (
+                  <View style={styles.detailContentList}>
+                    {selectedPrayerDetail.content.map((bullet, idx) => (
+                      <View key={idx} style={styles.detailBulletRow}>
+                        <View style={styles.detailBulletDot} />
+                        <Text style={styles.detailBulletText}>{bullet}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+            </ScrollView>
+
+            {selectedPrayerDetail && (
+              <View style={styles.detailBottomActionBar}>
+                <TouchableOpacity
+                  style={[
+                    styles.detailPrayBtn,
+                    joinedIds.has(selectedPrayerDetail.id) && styles.detailPrayBtnActive,
+                  ]}
+                  onPress={() => handlePray(selectedPrayerDetail.id)}
+                  activeOpacity={0.8}
+                >
+                  <Heart
+                    size={18}
+                    color={joinedIds.has(selectedPrayerDetail.id) ? '#EF4444' : '#0c7ae0'}
+                    fill={joinedIds.has(selectedPrayerDetail.id) ? '#EF4444' : 'transparent'}
+                  />
+                  <Text
+                    style={[
+                      styles.detailPrayBtnText,
+                      joinedIds.has(selectedPrayerDetail.id) && styles.detailPrayBtnTextActive,
+                    ]}
+                  >
+                    {joinedIds.has(selectedPrayerDetail.id)
+                      ? `En oración (${selectedPrayerDetail.prayerCount})`
+                      : `Unirme en oración (${selectedPrayerDetail.prayerCount})`}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.detailCommentBtn}
+                  onPress={() => {
+                    const prayer = selectedPrayerDetail;
+                    setSelectedPrayerDetail(null);
+                    handleOpenComments(prayer);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <MessageSquare size={17} color="#0c7ae0" />
+                  <Text style={styles.detailCommentBtnText}>
+                    {selectedPrayerDetail.commentCount ?? 0}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.detailShareBtn}
+                  onPress={() => handleShare(selectedPrayerDetail)}
+                  activeOpacity={0.8}
+                >
+                  <Share2 size={17} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
       </Modal>
 
@@ -763,7 +806,10 @@ export default function PrayerWallScreen() {
         animationType="slide"
         onRequestClose={() => setActivePrayerForComments(null)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
           <View style={[styles.commentsModalCard, globalStyles.shadowMd]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 8 }}>
@@ -777,7 +823,7 @@ export default function PrayerWallScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Comments List */}
+            {/* Comments List formatted like cards */}
             <ScrollView style={styles.commentsList} showsVerticalScrollIndicator={false}>
               {isLoadingComments ? (
                 <View style={styles.commentsLoading}>
@@ -793,24 +839,39 @@ export default function PrayerWallScreen() {
                 </View>
               ) : (
                 comments.map((comment) => (
-                  <View key={comment.id} style={styles.commentCard}>
-                    <View style={styles.commentHeader}>
-                      <View style={styles.commentAuthorRow}>
-                        <Text style={styles.commentAuthorName}>{comment.authorName}</Text>
-                        <View style={styles.commentRoleBadge}>
-                          <Text style={styles.commentRoleText}>{comment.authorRole}</Text>
+                  <View key={comment.id} style={styles.commentTimelineCard}>
+                    <View style={styles.commentCardHeader}>
+                      <View style={styles.commentAuthorLeft}>
+                        <View style={styles.commentInitialCircle}>
+                          <Text style={styles.commentInitialText}>
+                            {(comment.authorName || 'C')[0].toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.commentTitleCol}>
+                          <View style={styles.commentNameBadgeRow}>
+                            <Text style={styles.commentAuthorName} numberOfLines={1}>
+                              {comment.authorName}
+                            </Text>
+                            <View style={styles.commentRoleBadge}>
+                              <Text style={styles.commentRoleText}>
+                                {comment.authorRole || 'Camarada'}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.commentCardAuthorSub}>
+                            {new Date(comment.createdAt).toLocaleDateString('es-AR', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}{' '}
+                            • En Cobertura
+                          </Text>
                         </View>
                       </View>
-                      <Text style={styles.commentTime}>
-                        {new Date(comment.createdAt).toLocaleDateString('es-AR', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
                     </View>
-                    <Text style={styles.commentContent}>{comment.content}</Text>
+
+                    <Text style={styles.commentBodyText}>{comment.content}</Text>
                   </View>
                 ))
               )}
@@ -851,7 +912,7 @@ export default function PrayerWallScreen() {
               </View>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1354,7 +1415,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '85%',
+    height: '70%',
+    maxHeight: '75%',
+    minHeight: 380,
+    justifyContent: 'space-between',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1377,15 +1441,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalPrayerTextInput: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
     borderRadius: 14,
     padding: 14,
     fontFamily: Theme.fonts.body,
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#0F172A',
-    minHeight: 100,
+    flex: 1,
+    minHeight: 140,
     textAlignVertical: 'top',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   modalActionRow: {
     flexDirection: 'row',
@@ -1421,16 +1488,198 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
+  // Detail Modal Styles (When Card is tapped)
+  detailModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    height: '75%',
+    maxHeight: '85%',
+    justifyContent: 'space-between',
+  },
+  detailBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  detailBadgeText: {
+    ...globalStyles.labelCaps,
+    color: '#0c7ae0',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailModalScroll: {
+    flex: 1,
+    marginVertical: 12,
+  },
+  detailAuthorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 10,
+    marginBottom: 14,
+  },
+  detailAuthorAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0c7ae0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailAuthorAvatarText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  detailAuthorName: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13.5,
+    color: '#0F172A',
+  },
+  detailAuthorDate: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  detailActiveBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  detailActiveBadgeText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 9.5,
+    color: '#0c7ae0',
+  },
+  detailBodyBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+  },
+  detailBodyText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#1E293B',
+  },
+  detailContentList: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  detailBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 6,
+  },
+  detailBulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0c7ae0',
+    marginTop: 7,
+  },
+  detailBulletText: {
+    flex: 1,
+    fontFamily: Theme.fonts.body,
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  detailBottomActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  detailPrayBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  detailPrayBtnActive: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  detailPrayBtnText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13,
+    color: '#0c7ae0',
+  },
+  detailPrayBtnTextActive: {
+    color: '#EF4444',
+  },
+  detailCommentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  detailCommentBtnText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13,
+    color: '#0c7ae0',
+  },
+  detailShareBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   // Comments Modal
   commentsModalCard: {
-    backgroundColor: Theme.colors.surfaceContainerLowest,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 20,
+    height: '75%',
     maxHeight: '80%',
+    justifyContent: 'space-between',
   },
   commentsList: {
-    maxHeight: 320,
+    flex: 1,
     marginBottom: 14,
   },
   commentsLoading: {
@@ -1459,49 +1708,84 @@ const styles = StyleSheet.create({
     color: Theme.colors.onSurfaceVariant,
     textAlign: 'center',
   },
-  commentCard: {
-    backgroundColor: Theme.colors.surfaceContainerLow,
-    borderRadius: Theme.roundness.md,
-    padding: 10,
-    marginBottom: 8,
-    gap: 4,
+  commentTimelineCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
-  commentHeader: {
+  commentCardHeader: {
+    marginBottom: 6,
+  },
+  commentAuthorLeft: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
   },
-  commentAuthorRow: {
+  commentInitialCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentInitialText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13,
+    color: '#0c7ae0',
+  },
+  commentTitleCol: {
+    flex: 1,
+  },
+  commentNameBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   commentAuthorName: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 12,
-    color: Theme.colors.onSurface,
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13,
+    color: '#0F172A',
   },
   commentRoleBadge: {
-    backgroundColor: Theme.colors.surfaceContainer,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 3,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   commentRoleText: {
-    ...globalStyles.labelCaps,
-    fontSize: 8,
-    color: Theme.colors.secondary,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 9,
+    color: '#475569',
   },
-  commentTime: {
-    ...globalStyles.labelCaps,
-    fontSize: 8,
-    color: Theme.colors.onSurfaceVariant,
+  commentCardAuthorSub: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 10.5,
+    color: '#64748B',
+    marginTop: 1,
   },
-  commentContent: {
-    ...globalStyles.bodySm,
-    fontSize: 12,
-    lineHeight: 17,
-    color: Theme.colors.onSurface,
+  commentBodyText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 12.5,
+    color: '#1E293B',
+    lineHeight: 18,
+    marginTop: 2,
   },
   commentInputRow: {
     flexDirection: 'row',

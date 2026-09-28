@@ -1,26 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Pressable,
+  Image,
+  Alert,
 } from 'react-native';
-import { Theme, globalStyles } from '../../theme/Theme';
+import { Theme } from '../../theme/Theme';
 import {
   Heart,
-  MessageSquare,
-  Share2,
-  Edit2,
-  Trash2,
-  User,
-  Shield,
-  Tag,
-  Clock,
-  BookOpen,
+  MessageCircle,
+  MoreVertical,
 } from 'lucide-react-native';
 import type { BlogPostItem } from '../../types/blog';
 import type { AppRole } from '../../types/api';
+import { useAuthStore } from '../../lib/stores/auth';
 
 export function formatRelativeTime(dateString: string): string {
   if (!dateString) return '';
@@ -54,13 +50,40 @@ export function getRoleBadgeConfig(role: AppRole): { label: string; bg: string; 
   }
 }
 
+export function getAuthorInitials(name?: string): string {
+  if (!name) return 'A';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+export function calculateReadingTime(text?: string): number {
+  if (!text) return 3;
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(1, Math.ceil(words / 180));
+}
+
+const DEFAULT_BLOG_COVERS = [
+  'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=600',
+  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=600',
+  'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600',
+  'https://images.unsplash.com/photo-1519791883288-dc8bd696e667?auto=format&fit=crop&q=80&w=600',
+  'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&q=80&w=600',
+];
+
+export function getDeterministicBlogCover(id: number): string {
+  return DEFAULT_BLOG_COVERS[Math.abs(id) % DEFAULT_BLOG_COVERS.length];
+}
+
 interface BlogCardProps {
   blog: BlogPostItem;
   canEdit: boolean;
   canDelete: boolean;
   onPress: (blog: BlogPostItem) => void;
   onLikePress: (blog: BlogPostItem) => void;
-  onSharePress: (blog: BlogPostItem) => void;
+  onSharePress?: (blog: BlogPostItem) => void;
   onCommentPress: (blog: BlogPostItem) => void;
   onEditPress?: (blog: BlogPostItem) => void;
   onDeletePress?: (blog: BlogPostItem) => void;
@@ -72,136 +95,162 @@ export const BlogCard = React.memo(function BlogCard({
   canDelete,
   onPress,
   onLikePress,
-  onSharePress,
   onCommentPress,
   onEditPress,
   onDeletePress,
 }: BlogCardProps) {
-  const roleConfig = getRoleBadgeConfig(blog.authorRole);
+  const user = useAuthStore((state) => state.user);
+  const [avatarError, setAvatarError] = useState(false);
+  const [coverError, setCoverError] = useState(false);
+
   const isLiked = Boolean(blog.isLikedByMe);
+  const readingTime = calculateReadingTime(blog.summary);
+  const primaryTag = blog.tags?.[0]?.name || 'Reflexión';
+
+  // Resolved user avatar (real avatar if present, otherwise clean initials badge)
+  const authorAvatarUri =
+    blog.authorAvatarUrl ||
+    (user && user.userId === blog.authorId ? user.avatarUrl : null);
+
+  const coverImageUri =
+    blog.coverImageUrl && !coverError
+      ? blog.coverImageUrl
+      : getDeterministicBlogCover(blog.id);
+
+  const handleMoreOptions = () => {
+    const options: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[] = [];
+
+    if (canEdit && onEditPress) {
+      options.push({
+        text: 'Editar Crónica',
+        onPress: () => onEditPress(blog),
+      });
+    }
+
+    if (canDelete && onDeletePress) {
+      options.push({
+        text: 'Eliminar Crónica',
+        style: 'destructive',
+        onPress: () => onDeletePress(blog),
+      });
+    }
+
+    options.push({
+      text: 'Cancelar',
+      style: 'cancel',
+    });
+
+    Alert.alert('Opciones de la Publicación', blog.title, options);
+  };
 
   return (
     <Pressable
       style={({ pressed }) => [styles.cardContainer, pressed && styles.cardPressed]}
       onPress={() => onPress(blog)}
     >
-      {/* Top Meta: Author and Time */}
-      <View style={styles.topRow}>
-        <View style={styles.authorGroup}>
-          <View style={styles.avatarMini}>
-            <Shield size={14} color={Theme.colors.primary} />
-          </View>
-          <View style={styles.authorInfoCol}>
-            <View style={styles.nameBadgeRow}>
-              <Text style={styles.authorName} numberOfLines={1}>
-                {blog.authorName || 'Autor'}
-              </Text>
-              <View style={[styles.roleBadge, { backgroundColor: roleConfig.bg }]}>
-                <Text style={[styles.roleBadgeText, { color: roleConfig.text }]}>
-                  {roleConfig.label}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.timeRow}>
-              <Clock size={11} color="#8A92A0" style={{ marginRight: 3 }} />
-              <Text style={styles.timeText}>{formatRelativeTime(blog.createdAt)}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Action Controls for Author / Moderator */}
-        {(canEdit || canDelete) && (
-          <View style={styles.moderationActions}>
-            {canEdit && onEditPress && (
-              <TouchableOpacity
-                onPress={() => onEditPress(blog)}
-                style={styles.modActionBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Edit2 size={15} color={Theme.colors.secondary} />
-              </TouchableOpacity>
-            )}
-            {canDelete && onDeletePress && (
-              <TouchableOpacity
-                onPress={() => onDeletePress(blog)}
-                style={styles.modActionBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Trash2 size={15} color={Theme.colors.error} />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+      {/* 1. Left: Cover Image Thumbnail (matching reference design) */}
+      <View style={styles.thumbnailWrapper}>
+        <Image
+          source={{ uri: coverImageUri }}
+          style={styles.thumbnailImage}
+          resizeMode="cover"
+          onError={() => setCoverError(true)}
+        />
       </View>
 
-      {/* Tags Chips */}
-      {blog.tags && blog.tags.length > 0 && (
-        <View style={styles.tagsRow}>
-          {blog.tags.map((tag) => (
-            <View key={tag.slug || tag.name} style={styles.tagPill}>
-              <Text style={styles.tagPillText}>#{tag.name}</Text>
-            </View>
-          ))}
+      {/* 2. Center: Tag Pill, Bold Headline, Author Metadata */}
+      <View style={styles.contentCol}>
+        {/* Top: Category Tag Pill */}
+        <View style={styles.tagPill}>
+          <Text style={styles.tagPillText} numberOfLines={1}>
+            {primaryTag}
+          </Text>
         </View>
-      )}
 
-      {/* Main Content: Title & Summary */}
-      <Text style={styles.title} numberOfLines={2}>
-        {blog.title}
-      </Text>
-
-      {Boolean(blog.summary) && (
-        <Text style={styles.summary} numberOfLines={3}>
-          {blog.summary}
+        {/* Title (2 lines max, bold headline font) */}
+        <Text style={styles.title} numberOfLines={2}>
+          {blog.title}
         </Text>
-      )}
 
-      {/* Footer Metrics & Actions */}
-      <View style={styles.cardFooter}>
-        <View style={styles.metricsLeft}>
+        {/* Author Metadata Row with dynamic avatar */}
+        <View style={styles.authorRow}>
+          {authorAvatarUri && !avatarError ? (
+            <Image
+              source={{ uri: authorAvatarUri }}
+              style={styles.authorAvatarImg}
+              resizeMode="cover"
+              onError={() => setAvatarError(true)}
+            />
+          ) : (
+            <View style={styles.authorAvatarDefault}>
+              <Text style={styles.authorAvatarInitials}>
+                {getAuthorInitials(blog.authorName)}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.authorTextCol}>
+            <Text style={styles.authorNameText} numberOfLines={1}>
+              {blog.authorName || 'Autor'}
+            </Text>
+            <Text style={styles.authorMetaSubText} numberOfLines={1}>
+              {formatRelativeTime(blog.createdAt)} • {readingTime} min
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* 3. Right: Options Menu (Top) & Interactive Counter Buttons (Bottom) */}
+      <View style={styles.rightCol}>
+        {/* Options / Moderation Trigger */}
+        {(canEdit || canDelete) ? (
+          <TouchableOpacity
+            style={styles.moreBtn}
+            onPress={handleMoreOptions}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+          >
+            <MoreVertical size={18} color="#64748B" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.moreBtnPlaceholder} />
+        )}
+
+        {/* Interactive Action Buttons with Counters (Replaces bookmark & share) */}
+        <View style={styles.actionsCol}>
           {/* Like Button */}
           <TouchableOpacity
-            style={[styles.metricBtn, isLiked && styles.metricBtnActive]}
-            onPress={() => onLikePress(blog)}
+            style={[styles.actionBtn, isLiked && styles.actionBtnLiked]}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onLikePress(blog);
+            }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Heart
-              size={17}
-              color={isLiked ? '#DC2626' : Theme.colors.secondary}
-              fill={isLiked ? '#DC2626' : 'transparent'}
+              size={15}
+              color={isLiked ? '#EF4444' : '#64748B'}
+              fill={isLiked ? '#EF4444' : 'transparent'}
             />
-            <Text style={[styles.metricText, isLiked && styles.metricTextLiked]}>
-              {blog.likesCount}
+            <Text style={[styles.actionCount, isLiked && styles.actionCountLiked]}>
+              {blog.likesCount || 0}
             </Text>
           </TouchableOpacity>
 
-          {/* Comments Button */}
+          {/* Comment Button */}
           <TouchableOpacity
-            style={styles.metricBtn}
-            onPress={() => onCommentPress(blog)}
+            style={styles.actionBtn}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onCommentPress(blog);
+            }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MessageSquare size={17} color={Theme.colors.secondary} />
-            <Text style={styles.metricText}>{blog.commentsCount}</Text>
+            <MessageCircle size={15} color="#64748B" />
+            <Text style={styles.actionCount}>{blog.commentsCount || 0}</Text>
           </TouchableOpacity>
-
-          {/* Share Button */}
-          <TouchableOpacity
-            style={styles.metricBtn}
-            onPress={() => onSharePress(blog)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Share2 size={17} color={Theme.colors.secondary} />
-            <Text style={styles.metricText}>{blog.sharesCount}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.readMorePrompt}>
-          <Text style={styles.readMoreText}>Leer completa</Text>
-          <BookOpen size={13} color={Theme.colors.primary} style={{ marginLeft: 4 }} />
         </View>
       </View>
     </Pressable>
@@ -210,155 +259,145 @@ export const BlogCard = React.memo(function BlogCard({
 
 const styles = StyleSheet.create({
   cardContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: Theme.roundness.lg,
-    padding: 16,
+    borderRadius: 16,
+    padding: 12,
     marginHorizontal: 16,
-    marginBottom: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: Theme.colors.outlineVariant,
+    borderColor: '#EAEFF5',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
   },
   cardPressed: {
     opacity: 0.94,
-    backgroundColor: '#FBFBFC',
+    backgroundColor: '#F8FAFC',
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  authorGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatarMini: {
-    width: 28,
-    height: 28,
+
+  // 1. Left Thumbnail
+  thumbnailWrapper: {
+    width: 96,
+    height: 96,
     borderRadius: 14,
-    backgroundColor: '#EBF2FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
   },
-  authorInfoCol: {
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  // 2. Middle Content Column
+  contentCol: {
     flex: 1,
-  },
-  nameBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  authorName: {
-    fontSize: 13,
-    fontFamily: Theme.fonts.bodySemiBold,
-    color: Theme.colors.onSurface,
-  },
-  roleBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  roleBadgeText: {
-    fontSize: 9,
-    fontFamily: Theme.fonts.bodySemiBold,
-    letterSpacing: 0.4,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 1,
-  },
-  timeText: {
-    fontSize: 11,
-    fontFamily: Theme.fonts.body,
-    color: '#8A92A0',
-  },
-  moderationActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  modActionBtn: {
-    padding: 4,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
+    marginLeft: 12,
+    marginRight: 6,
+    justifyContent: 'space-between',
+    minHeight: 96,
   },
   tagPill: {
-    backgroundColor: '#F1F4F8',
+    backgroundColor: '#F1F5F9',
+    alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
+    marginBottom: 4,
   },
   tagPillText: {
     fontSize: 11,
     fontFamily: Theme.fonts.bodySemiBold,
-    color: Theme.colors.primary,
+    color: '#475569',
   },
   title: {
-    fontSize: 17,
+    fontSize: 15,
     fontFamily: Theme.fonts.headlineBold,
-    color: Theme.colors.primaryDark,
-    lineHeight: 23,
+    color: '#0F172A',
+    lineHeight: 20,
     marginBottom: 6,
   },
-  summary: {
-    fontSize: 13,
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  authorAvatarImg: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+    marginRight: 7,
+  },
+  authorAvatarDefault: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 7,
+  },
+  authorAvatarInitials: {
+    fontSize: 10,
+    fontFamily: Theme.fonts.headlineBold,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  authorTextCol: {
+    flex: 1,
+  },
+  authorNameText: {
+    fontSize: 12,
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: '#1E293B',
+  },
+  authorMetaSubText: {
+    fontSize: 10.5,
     fontFamily: Theme.fonts.body,
-    color: Theme.colors.secondary,
-    lineHeight: 19,
-    marginBottom: 14,
+    color: '#64748B',
+    marginTop: 0.5,
   },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  // 3. Right Column: More Options & Action Counters
+  rightCol: {
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
+    minHeight: 96,
+    paddingLeft: 4,
   },
-  metricsLeft: {
+  moreBtn: {
+    padding: 2,
+  },
+  moreBtnPlaceholder: {
+    width: 22,
+    height: 22,
+  },
+  actionsCol: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 7,
+  },
+  actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
-  metricBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
     borderRadius: 6,
   },
-  metricBtnActive: {
+  actionBtnLiked: {
     backgroundColor: '#FEE2E2',
   },
-  metricText: {
-    fontSize: 12,
+  actionCount: {
+    fontSize: 11.5,
     fontFamily: Theme.fonts.bodySemiBold,
-    color: Theme.colors.secondary,
+    color: '#64748B',
+    minWidth: 14,
   },
-  metricTextLiked: {
-    color: '#DC2626',
-  },
-  readMorePrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  readMoreText: {
-    fontSize: 12,
-    fontFamily: Theme.fonts.bodySemiBold,
-    color: Theme.colors.primary,
+  actionCountLiked: {
+    color: '#EF4444',
   },
 });

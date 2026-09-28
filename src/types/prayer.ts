@@ -7,6 +7,7 @@ export interface Prayer {
   isAnonymous: boolean;
   prayerCount: number;
   createdAt: string;
+  commentCount?: number;
 }
 
 export interface PaginatedPrayersResponse {

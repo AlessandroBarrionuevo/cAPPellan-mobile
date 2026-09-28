@@ -6,13 +6,12 @@ import {
   Pressable,
   Image,
   Linking,
-  Share,
   Alert,
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
 import {
   Heart,
-  Share2,
+  MessageCircle,
   Headphones,
   Tv,
   Image as ImageIcon,
@@ -30,6 +29,7 @@ interface ContentCardProps {
   canManage?: boolean;
   onLikeToggle: (id: number) => void;
   onOpenDetail: (content: ContentItem) => void;
+  onOpenComments?: (content: ContentItem) => void;
   onEdit?: (content: ContentItem) => void;
   onDelete?: (content: ContentItem) => void;
   isLiking?: boolean;
@@ -97,6 +97,7 @@ export const ContentCard = React.memo(function ContentCard({
   canManage = false,
   onLikeToggle,
   onOpenDetail,
+  onOpenComments,
   onEdit,
   onDelete,
   isLiking = false,
@@ -119,18 +120,6 @@ export const ContentCard = React.memo(function ContentCard({
       }
     } catch {
       // Ignore
-    }
-  };
-
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        title: content.title,
-        message: `${content.title}\n\n${content.description}\n\n${content.mediaUrl}`,
-        url: content.mediaUrl,
-      });
-    } catch {
-      // Dismissed or ignored
     }
   };
 
@@ -304,10 +293,13 @@ export const ContentCard = React.memo(function ContentCard({
             </Text>
           </Pressable>
 
-          {/* Share Button */}
-          <Pressable style={styles.actionBtn} onPress={handleShare}>
-            <Share2 size={16} color={Theme.colors.secondary} />
-            <Text style={styles.actionBtnText}>Compartir</Text>
+          {/* Comment Button with count */}
+          <Pressable
+            style={styles.actionBtn}
+            onPress={() => (onOpenComments ? onOpenComments(content) : onOpenDetail(content))}
+          >
+            <MessageCircle size={16} color={Theme.colors.secondary} />
+            <Text style={styles.actionBtnText}>{content.commentsCount ?? 0}</Text>
           </Pressable>
         </View>
 

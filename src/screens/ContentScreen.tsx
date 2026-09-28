@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
+  TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { FilterPills, TacticalButton } from '../components/common';
@@ -30,7 +32,9 @@ import {
 } from '../lib/api/content';
 import {
   ContentCard,
+  ModernSocialContentCard,
   ContentDetailModal,
+  ContentCommentsModal,
   ContentFormModal,
 } from '../components/content';
 import type { ContentItem, ContentType } from '../types/api';
@@ -56,6 +60,12 @@ export default function ContentScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // View Mode: 'modern' (new Instagram/TikTok cutout card design) | 'classic' (original cards)
+  const [viewMode, setViewMode] = useState<'modern' | 'classic'>('modern');
+
+  // Comments Modal
+  const [activeContentForComments, setActiveContentForComments] = useState<ContentItem | null>(null);
 
   // Detail Modal
   const [selectedDetail, setSelectedDetail] = useState<ContentItem | null>(null);
@@ -252,6 +262,45 @@ export default function ContentScreen() {
         ) : null}
       </View>
 
+      {/* 2.5 View Mode Switcher: Moderno (New Social Cutout) vs Clásico (Original) */}
+      <View style={styles.viewModeToggleRow}>
+        <TouchableOpacity
+          style={[
+            styles.viewModeTab,
+            viewMode === 'modern' && styles.viewModeTabActive,
+          ]}
+          onPress={() => setViewMode('modern')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.viewModeTabText,
+              viewMode === 'modern' && styles.viewModeTabTextActive,
+            ]}
+          >
+            Diseño Moderno
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.viewModeTab,
+            viewMode === 'classic' && styles.viewModeTabActive,
+          ]}
+          onPress={() => setViewMode('classic')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.viewModeTabText,
+              viewMode === 'classic' && styles.viewModeTabTextActive,
+            ]}
+          >
+            Diseño Clásico
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* 3. Filter Pills */}
       <FilterPills
         items={FILTER_CATEGORIES}
@@ -311,16 +360,33 @@ export default function ContentScreen() {
       <FlatList
         data={filteredContents}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => (
-          <ContentCard
-            content={item}
-            canManage={canManage}
-            onLikeToggle={handleLikeToggle}
-            onOpenDetail={handleOpenDetail}
-            onEdit={handleOpenEdit}
-            onDelete={handleDelete}
-          />
-        )}
+        renderItem={({ item }) => {
+          if (viewMode === 'classic') {
+            return (
+              <ContentCard
+                content={item}
+                canManage={canManage}
+                onLikeToggle={handleLikeToggle}
+                onOpenDetail={handleOpenDetail}
+                onOpenComments={setActiveContentForComments}
+                onEdit={handleOpenEdit}
+                onDelete={handleDelete}
+              />
+            );
+          }
+
+          return (
+            <ModernSocialContentCard
+              content={item}
+              canManage={canManage}
+              onLikeToggle={handleLikeToggle}
+              onOpenDetail={handleOpenDetail}
+              onOpenComments={setActiveContentForComments}
+              onEdit={handleOpenEdit}
+              onDelete={handleDelete}
+            />
+          );
+        }}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={[
@@ -352,6 +418,24 @@ export default function ContentScreen() {
           setSelectedDetail(null);
         }}
         onLikeChanged={handleDetailLikeChanged}
+        onOpenComments={setActiveContentForComments}
+      />
+
+      {/* Content Comments Modal */}
+      <ContentCommentsModal
+        visible={Boolean(activeContentForComments)}
+        content={activeContentForComments}
+        onClose={() => setActiveContentForComments(null)}
+        onCommentAdded={(contentId, newCount) => {
+          setContents((prev) =>
+            prev.map((c) => (c.id === contentId ? { ...c, commentsCount: newCount } : c))
+          );
+          if (activeContentForComments && activeContentForComments.id === contentId) {
+            setActiveContentForComments((prev) =>
+              prev ? { ...prev, commentsCount: newCount } : null
+            );
+          }
+        }}
       />
 
       {/* Content Create / Edit Modal */}
@@ -448,6 +532,44 @@ const styles = StyleSheet.create({
   },
   filterPills: {
     paddingBottom: 6,
+  },
+  // View Mode Switcher Styles (Matches Prayer Wall Screen)
+  viewModeToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+  },
+  viewModeTab: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewModeTabActive: {
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  viewModeTabText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  viewModeTabTextActive: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: '#0F172A',
   },
   loadingBox: {
     paddingVertical: 40,

@@ -11,6 +11,7 @@ export interface ContentItem {
   authorId: number;
   likesCount: number;
   isLikedByMe?: boolean | null;
+  commentsCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +34,7 @@ export interface AuthUser {
   username: string;
   role: AppRole;
   leaderId?: number | null;
+  avatarUrl?: string | null;
 }
 
 export interface LoginResponse {
@@ -164,6 +166,7 @@ export interface BasicProfile {
   isAnonymous: boolean;
   phone?: string | null;
   location?: string | null;
+  avatarUrl?: string | null;
   updatedAt?: string | null;
 }
 
