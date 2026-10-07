@@ -16,9 +16,13 @@ import { Theme, globalStyles } from '../../theme/Theme';
 import { useAppInsets } from '../../lib/safeArea';
 import { ChatStompService } from '../../lib/chat/stompClient';
 import { useAuthStore } from '../../lib/stores/auth';
+import { useCallStore } from '../../lib/stores/call';
+import { useChaplainStore } from '../../lib/stores/chaplain';
 import { request } from '../../lib/api/client';
 import { ENDPOINTS } from '../../lib/api/endpoints';
 import { getMyBasicProfile } from '../../lib/api/profiles';
+import { SseClient } from '../../lib/api/sse';
+import type { Session } from '../../types/api';
 import type {
   ChatMessage,
   ChatConnectionStatus,
@@ -69,6 +73,7 @@ export function ChatRoomView({
   const flatListRef = useRef<FlatList>(null);
   const stompRef = useRef<ChatStompService | null>(null);
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
 
   const displayTitle = isChaplainMode ? comradeName : chaplainName;
   const displaySubtitle = isChaplainMode
@@ -96,7 +101,7 @@ export function ChatRoomView({
   const mySenderRole: ChatSenderRole = isChaplainMode
     ? 'CHAPLAIN'
     : user
-    ? 'USER'
+    ? 'BASIC'
     : 'GUEST';
 
   const mySenderName = isChaplainMode
@@ -105,42 +110,176 @@ export function ChatRoomView({
     ? 'Oficial Reservado'
     : user?.username || 'Anónimo';
 
-  // 1. Fetch REST message history
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Reset local state whenever sessionId changes
+  const [sessionStatus, setSessionStatus] = useState<'LOADING' | 'WAITING' | 'IN_PROGRESS' | 'ENDED'>(
+    sessionId ? 'LOADING' : 'ENDED'
+  );
+
+  useEffect(() => {
+    setMessages([]);
+    setInputText('');
+    setErrorMessage(null);
+    setSessionStatus(sessionId ? 'LOADING' : 'ENDED');
+  }, [sessionId]);
+
+  // Centralized remote session termination handler (chaplain finishes on Web, or session ended on server)
+  const isTerminatedRef = useRef(false);
+
+  const handleRemoteSessionEnded = useCallback(() => {
+    if (isTerminatedRef.current) return;
+    isTerminatedRef.current = true;
+    setSessionStatus('ENDED');
+
+    if (stompRef.current) {
+      stompRef.current.disconnect();
+      stompRef.current = null;
+    }
+
+    useChaplainStore.getState().clearAssignedCall();
+    useCallStore.getState().resetCall();
+
+    if (!isChaplainMode) {
+      Alert.alert(
+        'Consulta Concluida',
+        'El capellán ha dado por finalizada la sesión de acompañamiento.',
+        [
+          {
+            text: 'Entendido',
+            onPress: () => {
+              onChatEnded();
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    } else {
+      onChatEnded();
+      if (sessionId && onRequestReport) {
+        onRequestReport(sessionId);
+      }
+    }
+  }, [isChaplainMode, onChatEnded, onRequestReport, sessionId]);
+
+  // 1. Fetch REST message history for this session only (safely merged)
   const loadMessageHistory = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const history = await request<ChatMessage[]>(ENDPOINTS.CALLS_MESSAGES(sessionId));
+      const messagesUrl = clientToken
+        ? `${ENDPOINTS.CALLS_MESSAGES(sessionId)}?clientToken=${encodeURIComponent(clientToken)}`
+        : ENDPOINTS.CALLS_MESSAGES(sessionId);
+      const history = await request<ChatMessage[]>(messagesUrl, {
+        headers: clientToken ? { 'X-Client-Token': clientToken } : {},
+      });
       if (Array.isArray(history)) {
         setMessages((prev) => {
-          const map = new Map<string, ChatMessage>();
-          prev.forEach((m) => map.set(String(m.id || m.timestamp || m.content), m));
-          history.forEach((m) => map.set(String(m.id || m.timestamp || m.content), m));
-          return Array.from(map.values());
+          const validHistory = history.filter(
+            (m) => !m.sessionId || Number(m.sessionId) === Number(sessionId)
+          );
+          const historyIds = new Set(validHistory.map((m) => m.id).filter(Boolean));
+          // Preserve any unrecorded live messages or pending optimistic messages
+          const pendingLive = prev.filter(
+            (m) => !m.id || (!historyIds.has(m.id) && m.id > 0) || (m.id && m.id < 0)
+          );
+          return [...validHistory, ...pendingLive];
         });
       }
     } catch (e) {
       console.warn('[ChatRoomView] Could not load message history:', e);
     }
-  }, [sessionId]);
+  }, [sessionId, clientToken]);
 
-  // 2. Setup STOMP WebSocket
+  // 2. Pre-flight session verification before STOMP connect
   useEffect(() => {
     if (!sessionId) return;
+    let isCancelled = false;
+
+    const detailUrl = clientToken
+      ? `${ENDPOINTS.CALL_DETAIL(sessionId)}?clientToken=${encodeURIComponent(clientToken)}`
+      : ENDPOINTS.CALL_DETAIL(sessionId);
+
+    request<Session>(detailUrl, {
+      headers: clientToken ? { 'X-Client-Token': clientToken } : {},
+    })
+      .then((detail) => {
+        if (isCancelled) return;
+        if (!detail || detail.status === 'ENDED') {
+          handleRemoteSessionEnded();
+        } else if (detail.status === 'WAITING') {
+          setSessionStatus('WAITING');
+        } else {
+          setSessionStatus('IN_PROGRESS');
+        }
+      })
+      .catch((err: any) => {
+        if (isCancelled) return;
+        if (err?.status === 404 || err?.status === 409) {
+          handleRemoteSessionEnded();
+        } else {
+          setSessionStatus('IN_PROGRESS');
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [sessionId, clientToken, handleRemoteSessionEnded]);
+
+  // 3. Setup STOMP WebSocket (active when session is verified)
+  useEffect(() => {
+    if (!sessionId || sessionStatus === 'ENDED') return;
 
     loadMessageHistory();
 
     const stomp = new ChatStompService({
       sessionId,
+      token: token || undefined,
+      clientToken: clientToken || undefined,
+      isChaplain: isChaplainMode,
       onMessage: (msg) => {
+        // Discard any message not matching current active session
+        if (msg.sessionId && Number(msg.sessionId) !== Number(sessionId)) {
+          console.warn(`[ChatRoomView] Ignored foreign message for session ${msg.sessionId}`);
+          return;
+        }
         setMessages((prev) => {
+          // If message already exists by id, ignore duplicate
           if (msg.id && prev.some((p) => p.id === msg.id)) {
             return prev;
+          }
+          // If an optimistic message matches, replace it seamlessly
+          const optIndex = prev.findIndex(
+            (p) =>
+              p.id &&
+              p.id < 0 &&
+              p.content === msg.content &&
+              p.senderRole === msg.senderRole
+          );
+          if (optIndex >= 0) {
+            const next = [...prev];
+            next[optIndex] = msg;
+            return next;
           }
           return [...prev, msg];
         });
       },
       onStatusChange: (status) => {
         setConnectionStatus(status);
+        if (status === 'connected') {
+          setErrorMessage(null);
+        }
+      },
+      onError: (err) => {
+        console.error('[ChatRoomView] Stomp error:', err);
+        const text = err instanceof Error ? err.message : String(err);
+        if (text.includes('already ended') || text.includes('1002')) {
+          handleRemoteSessionEnded();
+        } else if (text.includes('Access denied') || text.includes('Unauthorized')) {
+          setErrorMessage('Acceso denegado. Volvé a iniciar sesión.');
+        } else {
+          setErrorMessage('Error en enlace. Reconectando...');
+        }
       },
     });
 
@@ -151,11 +290,72 @@ export function ChatRoomView({
       stomp.disconnect();
       stompRef.current = null;
     };
-  }, [sessionId, clientToken, loadMessageHistory]);
+  }, [sessionId, sessionStatus, token, clientToken, isChaplainMode, loadMessageHistory, handleRemoteSessionEnded]);
+
+  // 4. Multi-channel Remote Session Termination Monitoring (SSE + Polling)
+  useEffect(() => {
+    if (!sessionId || sessionStatus === 'ENDED') return;
+    isTerminatedRef.current = false;
+
+    // Real-time SSE on /calls/{sessionId}/sse
+    const sseUrl = ENDPOINTS.CALL_SSE_STATUS(sessionId, clientToken);
+    const sse = new SseClient(sseUrl);
+
+    sse.addEventListener('status-change', (data: any) => {
+      if (!data) return;
+      if (data.status === 'ENDED') {
+        handleRemoteSessionEnded();
+      } else if (data.status === 'IN_PROGRESS') {
+        setSessionStatus('IN_PROGRESS');
+      }
+    });
+
+    sse.connect();
+
+    // Secondary Polling fallback every 3.5s
+    const pollInterval = setInterval(async () => {
+      if (isTerminatedRef.current) return;
+      try {
+        const detail = await request<Session>(ENDPOINTS.CALL_DETAIL(sessionId));
+        if (detail) {
+          if (detail.status === 'ENDED') {
+            handleRemoteSessionEnded();
+          } else if (detail.status === 'IN_PROGRESS' && sessionStatus === 'WAITING') {
+            setSessionStatus('IN_PROGRESS');
+          }
+        }
+      } catch (err: any) {
+        if (err?.status === 404 || err?.status === 409) {
+          handleRemoteSessionEnded();
+        }
+      }
+    }, 3500);
+
+    return () => {
+      sse.close();
+      clearInterval(pollInterval);
+    };
+  }, [sessionId, clientToken, sessionStatus, handleRemoteSessionEnded]);
 
   const handleSendMessage = () => {
     const trimmed = inputText.trim();
-    if (!trimmed || !sessionId) return;
+    if (!trimmed) return;
+
+    if (!sessionId || sessionStatus === 'ENDED') {
+      Alert.alert(
+        'Sin Sesión Activa',
+        'No hay una sesión asignada actualmente. Para iniciar una consulta, solicitala desde la Guardia o Inicio.'
+      );
+      return;
+    }
+
+    if (sessionStatus === 'WAITING') {
+      Alert.alert(
+        'Aguardando al Capellán',
+        'La sesión aún se encuentra en cola de espera. Podrás enviar mensajes en cuanto el capellán se una a la sala.'
+      );
+      return;
+    }
 
     const payload: SendChatMessagePayload = {
       sessionId,
@@ -166,16 +366,25 @@ export function ChatRoomView({
     };
 
     if (stompRef.current?.isConnected()) {
-      stompRef.current.sendMessage(payload);
-    } else {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          ...payload,
+      const sent = stompRef.current.sendMessage(payload);
+      if (sent) {
+        // Optimistic UI update: message appears instantly
+        const optimisticMsg: ChatMessage = {
+          id: -Date.now(),
+          sessionId,
+          senderRole: mySenderRole,
+          senderName: mySenderName,
+          content: trimmed,
           timestamp: new Date().toISOString(),
-        },
-      ]);
+        };
+        setMessages((prev) => [...prev, optimisticMsg]);
+      }
+    } else {
+      Alert.alert(
+        'Canal Desconectado',
+        errorMessage || 'El enlace seguro aún no está conectado. Por favor aguardá a que se establezca la conexión segura.'
+      );
+      return;
     }
 
     setInputText('');
@@ -199,9 +408,12 @@ export function ChatRoomView({
                 await request(ENDPOINTS.CALL_END(sessionId), { method: 'POST' });
               }
             } catch (e) {
-              // Ignored
+              // Ignored: If caller is BASIC user, backend enforces chaplain-only end (403),
+              // but local client session should still safely terminate and reset.
             } finally {
               setIsEnding(false);
+              useChaplainStore.getState().clearAssignedCall();
+              useCallStore.getState().resetCall();
               onChatEnded();
               if (isChaplainMode && sessionId && onRequestReport) {
                 onRequestReport(sessionId);
@@ -217,7 +429,11 @@ export function ChatRoomView({
     Alert.alert('Cierre Inmediato', 'Saliendo de la sala y purgando vista...', [
       {
         text: 'Salir',
-        onPress: onChatEnded,
+        onPress: () => {
+          useChaplainStore.getState().clearAssignedCall();
+          useCallStore.getState().resetCall();
+          onChatEnded();
+        },
       },
     ]);
   };
@@ -338,7 +554,19 @@ export function ChatRoomView({
             <View style={styles.chaplainNameCol}>
               <Text style={styles.chaplainName} numberOfLines={1}>{displayTitle}</Text>
               <Text style={styles.connectionStatusText}>
-                {connectionStatus === 'connected' ? 'Enlace cifrado activo' : 'Conectando túnel seguro...'}
+                {!sessionId || sessionStatus === 'ENDED'
+                  ? 'Sin sesión activa'
+                  : sessionStatus === 'WAITING'
+                  ? 'Aguardando al capellán...'
+                  : errorMessage
+                  ? errorMessage
+                  : connectionStatus === 'connected'
+                  ? 'Enlace cifrado activo'
+                  : connectionStatus === 'reconnecting'
+                  ? 'Reconectando túnel seguro...'
+                  : connectionStatus === 'error'
+                  ? 'Error en el enlace seguro'
+                  : 'Conectando túnel seguro...'}
               </Text>
             </View>
 
@@ -414,13 +642,29 @@ export function ChatRoomView({
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item) => String(item.id || item.timestamp || Math.random())}
+          keyExtractor={(item, index) =>
+            item.id
+              ? `msg-${item.id}`
+              : item.timestamp
+              ? `msg-${item.timestamp}-${index}`
+              : `msg-${index}`
+          }
           renderItem={renderMessageItem}
+          style={styles.messagesFlatList}
           contentContainerStyle={[
             styles.messagesListContent,
             isTablet && styles.tabletContent,
           ]}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <View style={styles.emptyMessagesContainer}>
+              <Text style={styles.emptyMessagesText}>
+                {sessionStatus === 'WAITING'
+                  ? 'Aguardando al capellán de guardia para iniciar...'
+                  : 'Enlace cifrado activo. Escribí tu mensaje para iniciar la conversación.'}
+              </Text>
+            </View>
+          }
           ListHeaderComponent={
             <View style={styles.chatListHeader}>
               <View style={styles.timePill}>
@@ -702,10 +946,28 @@ const styles = StyleSheet.create({
   chatArea: {
     flex: 1,
   },
+  messagesFlatList: {
+    flex: 1,
+  },
   messagesListContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 20,
+    flexGrow: 1,
+  },
+  emptyMessagesContainer: {
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyMessagesText: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.colors.onSurfaceVariant,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   chatListHeader: {
     marginBottom: 12,

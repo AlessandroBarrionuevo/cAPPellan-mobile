@@ -10,6 +10,7 @@ import {
 import { Theme, globalStyles } from '../../theme/Theme';
 import { useAppInsets } from '../../lib/safeArea';
 import {
+  Home,
   Shield,
   MessageSquare,
   FileText,
@@ -130,7 +131,7 @@ export function BottomNavBar({
         {
           key: 'home' as NavTab,
           label: 'Inicio',
-          icon: Shield,
+          icon: Home,
         },
         {
           key: 'biblia' as NavTab,
@@ -139,7 +140,7 @@ export function BottomNavBar({
         },
         {
           key: 'mas' as NavTab,
-          label: 'Más',
+          label: 'Comunidad',
           icon: LayoutGrid,
         },
         {

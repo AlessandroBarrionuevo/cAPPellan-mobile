@@ -6,18 +6,22 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { Heart, MessageSquare, ChevronDown } from 'lucide-react-native';
+import { Heart, MessageSquare, ChevronDown, Sparkles } from 'lucide-react-native';
 import { Theme } from '../../theme/Theme';
 import type { Prayer } from '../../types/prayer';
+import type { Gratitude } from '../../types/gratitude';
+
+export type TimelineCardItem = Prayer | Gratitude;
 
 export interface TimelinePrayerCardProps {
-  item: Prayer;
+  item: TimelineCardItem;
   index: number;
   isJoined: boolean;
   onPray: (id: number) => void;
-  onOpenComments?: (item: Prayer) => void;
-  onPressCard?: (item: Prayer) => void;
+  onOpenComments?: (item: any) => void;
+  onPressCard?: (item: any) => void;
   showConnector?: boolean;
+  variant?: 'prayer' | 'gratitude';
 }
 
 export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
@@ -28,16 +32,24 @@ export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
   onOpenComments,
   onPressCard,
   showConnector = true,
+  variant = 'prayer',
 }: TimelinePrayerCardProps) {
+  const isGratitude = variant === 'gratitude';
+
   const displayTitle =
     item.title && !item.title.endsWith('...')
       ? item.title
       : item.isAnonymous
-      ? 'Petición en Cobertura'
-      : `Petición de ${item.authorName || 'Camarada'}`;
+      ? (isGratitude ? 'Testimonio de Gratitud' : 'Petición en Cobertura')
+      : (isGratitude ? `Gratitud de ${item.authorName || 'Camarada'}` : `Petición de ${item.authorName || 'Camarada'}`);
 
-  const authorSubtitle = `${item.isAnonymous ? 'Oficial Reservado' : (item.authorName || 'Camarada')} • En Cobertura`;
-  const dateFormatted = `${new Date(item.createdAt).toLocaleDateString('es-AR')} • Activa`;
+  const authorSubtitle = isGratitude
+    ? `${item.isAnonymous ? 'Oficial Reservado' : (item.authorName || 'Camarada')} • Testimonio`
+    : `${item.isAnonymous ? 'Oficial Reservado' : (item.authorName || 'Camarada')} • En Cobertura`;
+
+  const dateFormatted = isGratitude
+    ? `${new Date(item.createdAt).toLocaleDateString('es-AR')} • Testimonio de Fe`
+    : `${new Date(item.createdAt).toLocaleDateString('es-AR')} • Activa`;
 
   // Bullets: description + date (or custom content if present)
   const bulletItems = useMemo(() => {
@@ -52,11 +64,15 @@ export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
     return lines;
   }, [item, dateFormatted]);
 
+  const actionCount = isGratitude
+    ? ((item as Gratitude).gratitudeCount ?? item.prayerCount ?? 0)
+    : (item.prayerCount ?? 0);
+
   return (
     <View style={styles.timelineRow}>
-      {/* 1. Left Column: Compact Blue Number Circle + Connector Line */}
+      {/* 1. Left Column: Compact Number Circle + Connector Line */}
       <View style={styles.timelineCol}>
-        <View style={styles.timelineCircle}>
+        <View style={[styles.timelineCircle, isGratitude && styles.timelineCircleGratitude]}>
           <Text style={styles.timelineNumberText}>{index + 1}</Text>
         </View>
 
@@ -84,7 +100,12 @@ export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
               <Text style={styles.timelineCardTitle} numberOfLines={1}>
                 {displayTitle}
               </Text>
-              <Text style={styles.timelineCardAuthorSub}>
+              <Text
+                style={[
+                  styles.timelineCardAuthorSub,
+                  isGratitude && styles.timelineCardAuthorSubGratitude,
+                ]}
+              >
                 {authorSubtitle}
               </Text>
             </View>
@@ -108,13 +129,17 @@ export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
           </View>
         </View>
 
-        {/* 3. Stacked Right Buttons: Heart above, Comment with Counter below */}
+        {/* 3. Stacked Right Buttons: Action above, Comment with Counter below */}
         <View style={styles.timelineActionCol}>
-          {/* Top Button: Heart / Unirme en oración */}
+          {/* Top Button: Heart for Prayer / Sparkles for Gratitude */}
           <TouchableOpacity
             style={[
               styles.timelineHeartBtn,
-              isJoined && styles.timelineHeartBtnActive,
+              isGratitude && styles.timelineGratitudeBtn,
+              isJoined &&
+                (isGratitude
+                  ? styles.timelineGratitudeBtnActive
+                  : styles.timelineHeartBtnActive),
             ]}
             onPress={(e) => {
               e.stopPropagation();
@@ -123,24 +148,37 @@ export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
             activeOpacity={0.75}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Heart
-              size={17}
-              color={isJoined ? '#EF4444' : '#64748B'}
-              fill={isJoined ? '#EF4444' : 'transparent'}
-            />
+            {isGratitude ? (
+              <Sparkles
+                size={17}
+                color={isJoined ? '#D97706' : '#64748B'}
+              />
+            ) : (
+              <Heart
+                size={17}
+                color={isJoined ? '#EF4444' : '#64748B'}
+                fill={isJoined ? '#EF4444' : 'transparent'}
+              />
+            )}
             <Text
               style={[
                 styles.timelineActionCount,
-                isJoined && styles.timelineActionCountActive,
+                isJoined &&
+                  (isGratitude
+                    ? styles.timelineActionCountGratitudeActive
+                    : styles.timelineActionCountActive),
               ]}
             >
-              {item.prayerCount}
+              {actionCount}
             </Text>
           </TouchableOpacity>
 
           {/* Bottom Button: Comment with Comment Counter */}
           <TouchableOpacity
-            style={styles.timelineCommentBtn}
+            style={[
+              styles.timelineCommentBtn,
+              isGratitude && styles.timelineCommentBtnGratitude,
+            ]}
             onPress={(e) => {
               e.stopPropagation();
               if (onOpenComments) {
@@ -152,8 +190,16 @@ export const TimelinePrayerCard = React.memo(function TimelinePrayerCard({
             activeOpacity={0.75}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <MessageSquare size={16} color={Theme.colors.primary} />
-            <Text style={styles.timelineCommentCount}>
+            <MessageSquare
+              size={16}
+              color={isGratitude ? '#D97706' : Theme.colors.primary}
+            />
+            <Text
+              style={[
+                styles.timelineCommentCount,
+                isGratitude && styles.timelineCommentCountGratitude,
+              ]}
+            >
               {item.commentCount ?? 0}
             </Text>
           </TouchableOpacity>
@@ -179,7 +225,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: Theme.colors.primary,
+    backgroundColor: Theme.colors.primary, // App brand blue (#0c7ae0)
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
@@ -193,6 +239,9 @@ const styles = StyleSheet.create({
         elevation: 2,
       },
     }),
+  },
+  timelineCircleGratitude: {
+    backgroundColor: '#D97706', // Warm Amber for gratitude
   },
   timelineNumberText: {
     fontFamily: Theme.fonts.headlineBold,
@@ -266,6 +315,9 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     marginTop: 2,
   },
+  timelineCardAuthorSubGratitude: {
+    color: '#D97706',
+  },
   timelineBulletsList: {
     gap: 3,
     marginTop: 2,
@@ -274,6 +326,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 5,
+  },
+  timelineBulletDot: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
   },
   timelineBulletText: {
     flex: 1,
@@ -312,6 +369,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderColor: '#FCA5A5',
   },
+  timelineGratitudeBtn: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  timelineGratitudeBtnActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
   timelineActionCount: {
     fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 9.5,
@@ -320,6 +385,9 @@ const styles = StyleSheet.create({
   },
   timelineActionCountActive: {
     color: '#EF4444',
+  },
+  timelineActionCountGratitudeActive: {
+    color: '#D97706',
   },
   timelineCommentBtn: {
     width: 42,
@@ -332,11 +400,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 3,
   },
+  timelineCommentBtnGratitude: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
   timelineCommentCount: {
     fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 9.5,
     color: Theme.colors.primary,
     marginTop: 1,
+  },
+  timelineCommentCountGratitude: {
+    color: '#D97706',
   },
 });
 

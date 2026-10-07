@@ -21,13 +21,29 @@ import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAuthStore } from '../lib/stores/auth';
 import { getPrayerComments, addPrayerComment } from '../lib/api/prayers';
+import {
+  getGratitudes,
+  createGratitude,
+  thankGratitude,
+  getGratitudeComments,
+  addGratitudeComment,
+} from '../lib/api/gratitudes';
 import type {
   Prayer,
   PaginatedPrayersResponse,
   CreatePrayerRequest,
   PrayerComment,
 } from '../types/prayer';
-import { TimelinePrayerCard } from '../components/prayer/TimelinePrayerCard';
+import type {
+  Gratitude,
+  PaginatedGratitudesResponse,
+  CreateGratitudeRequest,
+  GratitudeComment,
+} from '../types/gratitude';
+import {
+  TimelinePrayerCard,
+  TimelineCardItem,
+} from '../components/prayer/TimelinePrayerCard';
 import {
   TacticalCard,
   TacticalButton,
@@ -39,13 +55,10 @@ import {
   Lock,
   MessageSquare,
   Share2,
-  User,
   Check,
   X,
   Heart,
   Plus,
-  ChevronRight,
-  ChevronDown,
   Sparkles,
 } from 'lucide-react-native';
 
@@ -56,6 +69,16 @@ const PRAYER_FILTERS = [
   { id: 'mis_pedidos', label: 'Mis Peticiones' },
 ];
 
+const GRATITUDE_FILTERS = [
+  { id: 'all', label: 'Todas las Gratitudes' },
+  { id: 'servicio', label: 'Protección en Turno' },
+  { id: 'sanidad', label: 'Sanidad & Provisión' },
+  { id: 'mis_gratitudes', label: 'Mis Testimonios' },
+];
+
+// ============================================================================
+// CREATE PRAYER CARD (ORACIÓN)
+// ============================================================================
 interface PrayerCreateCardProps {
   onSubmit: (text: string, isAnonymous: boolean) => Promise<void>;
   isSubmitting: boolean;
@@ -91,10 +114,10 @@ const PrayerCreateCard = React.memo(function PrayerCreateCard({
         </TouchableOpacity>
       </View>
 
-      <View style={styles.galatiansQuoteRow}>
-        <Text style={styles.galatiansQuote}>
+      <View style={styles.quoteRow}>
+        <Text style={styles.scriptureQuote}>
           «Llevad los unos las cargas de los otros, y cumplid así la ley de Cristo.»{' '}
-          <Text style={styles.galatiansRef}>GÁLATAS 6:2</Text>
+          <Text style={styles.scriptureRef}>GÁLATAS 6:2</Text>
         </Text>
       </View>
 
@@ -127,239 +150,224 @@ const PrayerCreateCard = React.memo(function PrayerCreateCard({
 });
 
 // ============================================================================
-// 1. CLASSIC PRAYER CARD COMPONENT (PRESERVED INTACT AS REQUESTED)
+// CREATE GRATITUDE CARD (GRATITUD)
 // ============================================================================
-interface ClassicPrayerCardProps {
-  item: Prayer;
-  isJoined: boolean;
-  onPray: (id: number) => void;
-  onShare: (item: Prayer) => void;
-  onOpenComments: (item: Prayer) => void;
-  onPressCard?: (item: Prayer) => void;
+interface GratitudeCreateCardProps {
+  onSubmit: (title: string, description: string, isAnonymous: boolean) => Promise<void>;
+  isSubmitting: boolean;
 }
 
-export const ClassicPrayerCard = React.memo(function ClassicPrayerCard({
-  item,
-  isJoined,
-  onPray,
-  onShare,
-  onOpenComments,
-  onPressCard,
-}: ClassicPrayerCardProps) {
-  return (
-    <TacticalCard style={styles.prayerCard} variant="accentBorder" padding={14}>
-      <TouchableOpacity
-        activeOpacity={onPressCard ? 0.85 : 1}
-        onPress={() => onPressCard?.(item)}
-      >
-        <View style={styles.prayerCardHeader}>
-          <View style={styles.authorRow}>
-            <View style={styles.authorAvatar}>
-              <User size={15} color={Theme.colors.tacticalNavy} />
-            </View>
-            <View style={styles.authorCol}>
-              <Text style={styles.authorName}>
-                {item.isAnonymous ? 'Oficial Reservado' : item.authorName}
-              </Text>
-              <Text style={styles.authorTime}>
-                {new Date(item.createdAt).toLocaleDateString('es-AR')} • En Cobertura
-              </Text>
-            </View>
-          </View>
+const GratitudeCreateCard = React.memo(function GratitudeCreateCard({
+  onSubmit,
+  isSubmitting,
+}: GratitudeCreateCardProps) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
+  const handleSubmit = async () => {
+    if (!description.trim() || isSubmitting) return;
+    await onSubmit(title.trim(), description.trim(), isAnonymous);
+    setTitle('');
+    setDescription('');
+  };
+
+  return (
+    <TacticalCard style={styles.createCard} padding={14}>
+      <View style={styles.createHeaderRow}>
+        <Text style={styles.createTitle}>Compartir un Testimonio</Text>
+        <TouchableOpacity
+          style={styles.anonToggle}
+          onPress={() => setIsAnonymous((p) => !p)}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <View style={[styles.anonBox, isAnonymous && styles.anonBoxActiveGratitude]}>
+            {isAnonymous && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+          </View>
+          <Text style={styles.anonText}>Anónimo</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.quoteRow}>
+        <Text style={styles.scriptureQuote}>
+          «Dad gracias en todo, porque esta es la voluntad de Dios para con vosotros en Cristo Jesús.»{' '}
+          <Text style={[styles.scriptureRef, { color: '#D97706' }]}>1 TESALONICENSES 5:18</Text>
+        </Text>
+      </View>
+
+      <View style={styles.textAreaContainer}>
+        <TextInput
+          style={styles.gratitudeTitleInput}
+          placeholder="Título (ej. Agradecido por nuevo destino o sanidad)..."
+          placeholderTextColor="#8A92A0"
+          value={title}
+          onChangeText={setTitle}
+        />
+        <TextInput
+          style={[styles.textArea, { minHeight: 56 }]}
+          placeholder="Describe lo que Dios ha hecho, tu testimonio o motivo de acción de gracias..."
+          placeholderTextColor="#8A92A0"
+          multiline
+          numberOfLines={3}
+          value={description}
+          onChangeText={setDescription}
+        />
+
+        <View style={styles.createFooterRow}>
           <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
-              onShare(item);
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={[
+              styles.submitGratitudeBtn,
+              (!description.trim() || isSubmitting) && styles.submitGratitudeBtnDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!description.trim() || isSubmitting}
+            activeOpacity={0.8}
           >
-            <Share2 size={16} color={Theme.colors.secondary} />
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.submitGratitudeBtnText}>Publicar Gratitud</Text>
+                <Sparkles size={13} color="#FFFFFF" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.prayerDescription}>{item.description}</Text>
-      </TouchableOpacity>
-
-      <View style={styles.prayerCardActions}>
-        <TouchableOpacity
-          style={[
-            styles.joinPrayBtn,
-            isJoined && styles.joinPrayBtnActive,
-          ]}
-          onPress={() => onPray(item.id)}
-          activeOpacity={0.8}
-        >
-          <HeartHandshake
-            size={17}
-            color={isJoined ? '#FFFFFF' : Theme.colors.tacticalNavy}
-          />
-          <Text
-            style={[
-              styles.joinPrayText,
-              isJoined && styles.joinPrayTextActive,
-            ]}
-          >
-            {isJoined ? 'Orando' : 'Unirme en Oración'}
-          </Text>
-          <View
-            style={[
-              styles.prayerCountBadge,
-              isJoined && styles.prayerCountBadgeActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.prayerCountText,
-                isJoined && styles.prayerCountTextActive,
-              ]}
-            >
-              {item.prayerCount}
-            </Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.commentActionBtn}
-          onPress={() => onOpenComments(item)}
-          activeOpacity={0.8}
-        >
-          <MessageSquare size={15} color={Theme.colors.tacticalNavy} />
-          <Text style={styles.commentActionText}>
-            {item.commentCount ? `Aliento (${item.commentCount})` : 'Aliento & Oración'}
-          </Text>
-        </TouchableOpacity>
       </View>
     </TacticalCard>
   );
 });
 
-// ============================================================================
-// 2. TIMELINE PRAYER CARD COMPONENT (RE-EXPORTED FROM SHARED COMPONENT)
-// ============================================================================
-export { TimelinePrayerCard } from '../components/prayer/TimelinePrayerCard';
+// Re-export TimelinePrayerCard for external consumers if needed
+export { TimelinePrayerCard };
 
 // ============================================================================
-// 3. MAIN PRAYER WALL SCREEN
+// MAIN COMMUNITY SCREEN (ORACIÓN & GRATITUD)
 // ============================================================================
-export default function PrayerWallScreen() {
+interface PrayerWallScreenProps {
+  initialTab?: 'prayer' | 'gratitude';
+}
+
+export default function PrayerWallScreen({ initialTab = 'prayer' }: PrayerWallScreenProps) {
   const { width } = useWindowDimensions();
   const user = useAuthStore((state) => state.user);
 
+  // Active Tab: 'prayer' | 'gratitude'
+  const [activeTab, setActiveTab] = useState<'prayer' | 'gratitude'>(initialTab);
+
+  // Filter states
+  const [prayerFilter, setPrayerFilter] = useState('all');
+  const [gratitudeFilter, setGratitudeFilter] = useState('all');
+
+  // Prayers Data State
   const [prayers, setPrayers] = useState<Prayer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingPrayers, setIsLoadingPrayers] = useState(true);
+  const [isSubmittingPrayer, setIsSubmittingPrayer] = useState(false);
+  const [joinedPrayers, setJoinedPrayers] = useState<Set<number>>(new Set());
+
+  // Gratitudes Data State
+  const [gratitudes, setGratitudes] = useState<Gratitude[]>([]);
+  const [isLoadingGratitudes, setIsLoadingGratitudes] = useState(true);
+  const [isSubmittingGratitude, setIsSubmittingGratitude] = useState(false);
+  const [thankedGratitudes, setThankedGratitudes] = useState<Set<number>>(new Set());
+
+  // Shared refresh
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState('all');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // View Mode: 'timeline' (new design default) | 'classic' (original fallback)
-  const [viewMode, setViewMode] = useState<'timeline' | 'classic'>('timeline');
+  // Modal to Elevate Item via bottom button (+ Pedir / + Agradecer)
+  const [showBottomModal, setShowBottomModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalDesc, setModalDesc] = useState('');
+  const [modalAnonymous, setModalAnonymous] = useState(false);
+  const [isSubmittingModal, setIsSubmittingModal] = useState(false);
 
-  // Modal to Elevate Prayer via '+ Pedir' button
-  const [showPedirModal, setShowPedirModal] = useState(false);
-  const [pedirText, setPedirText] = useState('');
-  const [pedirAnonymous, setPedirAnonymous] = useState(false);
-  const [isSubmittingPedir, setIsSubmittingPedir] = useState(false);
+  // Detail Modal State (When Card is tapped)
+  const [selectedDetail, setSelectedDetail] = useState<{
+    item: TimelineCardItem;
+    type: 'prayer' | 'gratitude';
+  } | null>(null);
 
-  // Prayer Detail Modal State (When Card is tapped)
-  const [selectedPrayerDetail, setSelectedPrayerDetail] = useState<Prayer | null>(null);
-
-  // Joined prayers set for optimistic updates
-  const [joinedIds, setJoinedIds] = useState<Set<number>>(new Set());
-
-  // Prayer Comments Modal State
-  const [activePrayerForComments, setActivePrayerForComments] = useState<Prayer | null>(null);
-  const [comments, setComments] = useState<PrayerComment[]>([]);
+  // Comments Modal State
+  const [activeCommentTarget, setActiveCommentTarget] = useState<{
+    item: TimelineCardItem;
+    type: 'prayer' | 'gratitude';
+  } | null>(null);
+  const [comments, setComments] = useState<Array<PrayerComment | GratitudeComment>>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [isPostingComment, setIsPostingComment] = useState(false);
 
-  const handleOpenComments = async (prayer: Prayer) => {
-    setActivePrayerForComments(prayer);
-    setCommentText('');
-    setIsLoadingComments(true);
-    try {
-      const list = await getPrayerComments(prayer.id);
-      setComments(list);
-    } catch (e) {
-      setComments([]);
-    } finally {
-      setIsLoadingComments(false);
-    }
-  };
-
-  const handlePostComment = async () => {
-    if (!activePrayerForComments || !commentText.trim() || isPostingComment) return;
-    setIsPostingComment(true);
-    try {
-      const created = await addPrayerComment(activePrayerForComments.id, commentText.trim());
-      setComments((prev) => [...prev, created]);
-      setCommentText('');
-      // Optimistically update comment count in list and detail
-      setPrayers((prev) =>
-        prev.map((p) =>
-          p.id === activePrayerForComments.id
-            ? { ...p, commentCount: (p.commentCount ?? 0) + 1 }
-            : p
-        )
-      );
-      setSelectedPrayerDetail((prev) =>
-        prev && prev.id === activePrayerForComments.id
-          ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 }
-          : prev
-      );
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'No se pudo publicar la palabra de aliento.');
-    } finally {
-      setIsPostingComment(false);
-    }
-  };
-
+  // ==========================================================================
+  // DATA FETCHING
+  // ==========================================================================
   const fetchPrayers = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setIsLoadingPrayers(true);
       const res = await request<PaginatedPrayersResponse>(
         `${ENDPOINTS.PRAYERS}?page=0&size=20`
       );
-
       if (res && Array.isArray(res.content)) {
         setPrayers(res.content);
       }
     } catch (e: any) {
       console.warn('[PrayerWall] Could not fetch prayers:', e);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      setIsLoadingPrayers(false);
+    }
+  }, []);
+
+  const fetchGratitudes = useCallback(async () => {
+    try {
+      setIsLoadingGratitudes(true);
+      const res = await getGratitudes(0, 20);
+      if (res && Array.isArray(res.content)) {
+        setGratitudes(res.content);
+      }
+    } catch (e: any) {
+      console.warn('[PrayerWall] Could not fetch gratitudes:', e);
+    } finally {
+      setIsLoadingGratitudes(false);
     }
   }, []);
 
   useEffect(() => {
     fetchPrayers();
-  }, [fetchPrayers]);
+    fetchGratitudes();
+  }, [fetchPrayers, fetchGratitudes]);
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setIsRefreshing(true);
-    fetchPrayers();
+    await Promise.allSettled([fetchPrayers(), fetchGratitudes()]);
+    setIsRefreshing(false);
   };
 
+  // ==========================================================================
+  // HANDLERS: PRAY & THANK
+  // ==========================================================================
   const handlePray = async (prayerId: number) => {
-    if (joinedIds.has(prayerId)) return;
+    if (joinedPrayers.has(prayerId)) return;
 
-    // Optimistic update
-    setJoinedIds((prev) => new Set(prev).add(prayerId));
+    setJoinedPrayers((prev) => new Set(prev).add(prayerId));
     setPrayers((prev) =>
       prev.map((p) => (p.id === prayerId ? { ...p, prayerCount: p.prayerCount + 1 } : p))
     );
-    setSelectedPrayerDetail((prev) =>
-      prev && prev.id === prayerId ? { ...prev, prayerCount: prev.prayerCount + 1 } : prev
+    setSelectedDetail((prev) =>
+      prev && prev.type === 'prayer' && prev.item.id === prayerId
+        ? {
+            ...prev,
+            item: {
+              ...prev.item,
+              prayerCount: (prev.item.prayerCount ?? 0) + 1,
+            },
+          }
+        : prev
     );
 
     try {
-      await request<Prayer>(ENDPOINTS.PRAYER_PRAY(prayerId), {
-        method: 'POST',
-      });
-    } catch (err: any) {
-      // Revert if error
-      setJoinedIds((prev) => {
+      await request<Prayer>(ENDPOINTS.PRAYER_PRAY(prayerId), { method: 'POST' });
+    } catch {
+      setJoinedPrayers((prev) => {
         const next = new Set(prev);
         next.delete(prayerId);
         return next;
@@ -367,25 +375,88 @@ export default function PrayerWallScreen() {
       setPrayers((prev) =>
         prev.map((p) => (p.id === prayerId ? { ...p, prayerCount: p.prayerCount - 1 } : p))
       );
-      setSelectedPrayerDetail((prev) =>
-        prev && prev.id === prayerId ? { ...prev, prayerCount: prev.prayerCount - 1 } : prev
+      setSelectedDetail((prev) =>
+        prev && prev.type === 'prayer' && prev.item.id === prayerId
+          ? {
+              ...prev,
+              item: {
+                ...prev.item,
+                prayerCount: Math.max(0, (prev.item.prayerCount ?? 1) - 1),
+              },
+            }
+          : prev
       );
     }
   };
 
-  const handleShare = async (prayer: Prayer) => {
+  const handleThank = async (gratitudeId: number) => {
+    if (thankedGratitudes.has(gratitudeId)) return;
+
+    setThankedGratitudes((prev) => new Set(prev).add(gratitudeId));
+    setGratitudes((prev) =>
+      prev.map((g) =>
+        g.id === gratitudeId
+          ? {
+              ...g,
+              gratitudeCount: (g.gratitudeCount ?? 0) + 1,
+              prayerCount: (g.prayerCount ?? 0) + 1,
+            }
+          : g
+      )
+    );
+    setSelectedDetail((prev) =>
+      prev && prev.type === 'gratitude' && prev.item.id === gratitudeId
+        ? {
+            ...prev,
+            item: {
+              ...prev.item,
+              gratitudeCount: ((prev.item as Gratitude).gratitudeCount ?? 0) + 1,
+              prayerCount: (prev.item.prayerCount ?? 0) + 1,
+            } as Gratitude,
+          }
+        : prev
+    );
+
     try {
-      await Share.share({
-        message: `Petición de Oración: "${prayer.description}"\n\nCapellanAPP · Fraternidad y Cobertura Mutua`,
+      await thankGratitude(gratitudeId);
+    } catch {
+      setThankedGratitudes((prev) => {
+        const next = new Set(prev);
+        next.delete(gratitudeId);
+        return next;
       });
-    } catch (e) {
-      // Ignored
+      setGratitudes((prev) =>
+        prev.map((g) =>
+          g.id === gratitudeId
+            ? {
+                ...g,
+                gratitudeCount: Math.max(0, (g.gratitudeCount ?? 1) - 1),
+                prayerCount: Math.max(0, (g.prayerCount ?? 1) - 1),
+              }
+            : g
+        )
+      );
+      setSelectedDetail((prev) =>
+        prev && prev.type === 'gratitude' && prev.item.id === gratitudeId
+          ? {
+              ...prev,
+              item: {
+                ...prev.item,
+                gratitudeCount: Math.max(0, ((prev.item as Gratitude).gratitudeCount ?? 1) - 1),
+                prayerCount: Math.max(0, (prev.item.prayerCount ?? 1) - 1),
+              } as Gratitude,
+            }
+          : prev
+      );
     }
   };
 
+  // ==========================================================================
+  // HANDLERS: SUBMIT POSTS
+  // ==========================================================================
   const handleSubmitPrayer = useCallback(
     async (text: string, isAnonymous: boolean) => {
-      setIsSubmitting(true);
+      setIsSubmittingPrayer(true);
       try {
         const payload: CreatePrayerRequest = {
           title: text.slice(0, 40) + '...',
@@ -402,170 +473,345 @@ export default function PrayerWallScreen() {
         setPrayers((prev) => [created, ...prev]);
         Alert.alert(
           'Petición Elevada',
-          'Tu pedido de oración ha sido publicado bajo amparo y secreto pastoral.'
+          'Tu pedido de oración ha sido publicado bajo amparo y cobertura pastoral.'
         );
       } catch (err: any) {
         Alert.alert('Error', err.message || 'No se pudo publicar la petición.');
       } finally {
-        setIsSubmitting(false);
+        setIsSubmittingPrayer(false);
       }
     },
     [user?.username]
   );
 
-  const handleSubmitPedirModal = async () => {
-    if (!pedirText.trim() || isSubmittingPedir) return;
-    setIsSubmittingPedir(true);
+  const handleSubmitGratitude = useCallback(
+    async (title: string, description: string, isAnonymous: boolean) => {
+      setIsSubmittingGratitude(true);
+      try {
+        const payload: CreateGratitudeRequest = {
+          title: title.trim() || description.slice(0, 40) + '...',
+          description: description.trim(),
+          content: [],
+          authorName: isAnonymous ? 'Oficial Reservado' : user?.username || 'Anónimo',
+          isAnonymous,
+        };
+
+        const created = await createGratitude(payload);
+        setGratitudes((prev) => [created, ...prev]);
+        Alert.alert(
+          'Gratitud Compartida',
+          'Tu testimonio de gratitud ha sido publicado para edificación de la comunidad.'
+        );
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'No se pudo publicar la gratitud.');
+      } finally {
+        setIsSubmittingGratitude(false);
+      }
+    },
+    [user?.username]
+  );
+
+  const handleSubmitBottomModal = async () => {
+    if (!modalDesc.trim() || isSubmittingModal) return;
+    setIsSubmittingModal(true);
     try {
-      await handleSubmitPrayer(pedirText, pedirAnonymous);
-      setPedirText('');
-      setShowPedirModal(false);
+      if (activeTab === 'prayer') {
+        await handleSubmitPrayer(modalDesc, modalAnonymous);
+      } else {
+        await handleSubmitGratitude(modalTitle, modalDesc, modalAnonymous);
+      }
+      setModalTitle('');
+      setModalDesc('');
+      setShowBottomModal(false);
     } finally {
-      setIsSubmittingPedir(false);
+      setIsSubmittingModal(false);
     }
   };
 
-  const filteredPrayers = useMemo(() => {
-    if (selectedFilter === 'mis_pedidos') {
-      return prayers.filter(
-        (p) => p.authorName === user?.username
+  // ==========================================================================
+  // HANDLERS: COMMENTS
+  // ==========================================================================
+  const handleOpenComments = async (
+    item: TimelineCardItem,
+    type: 'prayer' | 'gratitude'
+  ) => {
+    setActiveCommentTarget({ item, type });
+    setCommentText('');
+    setIsLoadingComments(true);
+    try {
+      if (type === 'prayer') {
+        const list = await getPrayerComments(item.id);
+        setComments(list);
+      } else {
+        const list = await getGratitudeComments(item.id);
+        setComments(list);
+      }
+    } catch {
+      setComments([]);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  };
+
+  const handlePostComment = async () => {
+    if (!activeCommentTarget || !commentText.trim() || isPostingComment) return;
+    setIsPostingComment(true);
+    try {
+      const { item, type } = activeCommentTarget;
+      if (type === 'prayer') {
+        const created = await addPrayerComment(item.id, commentText.trim());
+        setComments((prev) => [...prev, created]);
+        setPrayers((prev) =>
+          prev.map((p) =>
+            p.id === item.id ? { ...p, commentCount: (p.commentCount ?? 0) + 1 } : p
+          )
+        );
+      } else {
+        const created = await addGratitudeComment(item.id, commentText.trim());
+        setComments((prev) => [...prev, created]);
+        setGratitudes((prev) =>
+          prev.map((g) =>
+            g.id === item.id ? { ...g, commentCount: (g.commentCount ?? 0) + 1 } : g
+          )
+        );
+      }
+      setSelectedDetail((prev) =>
+        prev && prev.item.id === activeCommentTarget.item.id
+          ? {
+              ...prev,
+              item: {
+                ...prev.item,
+                commentCount: (prev.item.commentCount ?? 0) + 1,
+              },
+            }
+          : prev
       );
+      setCommentText('');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'No se pudo publicar el comentario.');
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
+  const handleShare = async (item: TimelineCardItem) => {
+    try {
+      const isGratitude = activeTab === 'gratitude';
+      await Share.share({
+        message: `${isGratitude ? 'Testimonio de Gratitud' : 'Petición de Oración'}: "${item.description}"\n\nCapellanAPP · Fraternidad y Cobertura Mutua`,
+      });
+    } catch {
+      // Ignored
+    }
+  };
+
+  // ==========================================================================
+  // FILTERING
+  // ==========================================================================
+  const filteredPrayers = useMemo(() => {
+    if (prayerFilter === 'mis_pedidos') {
+      return prayers.filter((p) => p.authorName === user?.username);
     }
     return prayers;
-  }, [prayers, selectedFilter, user]);
+  }, [prayers, prayerFilter, user]);
+
+  const filteredGratitudes = useMemo(() => {
+    if (gratitudeFilter === 'mis_gratitudes') {
+      return gratitudes.filter((g) => g.authorName === user?.username);
+    }
+    return gratitudes;
+  }, [gratitudes, gratitudeFilter, user]);
 
   const isTablet = width > 500;
 
+  // ==========================================================================
+  // LIST HEADER
+  // ==========================================================================
   const listHeader = useMemo(
     () => (
       <View style={styles.headerContent}>
         {/* 1. Header Card */}
         <TacticalCard style={styles.headerCard} padding={14}>
           <View style={styles.brandRow}>
-            <Text style={styles.titleContent}>Muro de oración</Text>
+            <Text style={styles.titleContent}>
+              {activeTab === 'prayer' ? 'Muro de oración' : 'Muro de gratitud'}
+            </Text>
             <Text style={styles.brandSubtitle}>
-              Fraternidad, Oración y Cobertura Mutua
+              {activeTab === 'prayer'
+                ? 'Fraternidad, Oración y Cobertura Mutua'
+                : 'Celebración, Testimonios y Bendiciones Recibidas'}
             </Text>
           </View>
         </TacticalCard>
 
-        {/* 2. Elevar una Petición Isolated Component */}
-        <PrayerCreateCard
-          onSubmit={handleSubmitPrayer}
-          isSubmitting={isSubmitting}
-        />
+        {/* 2. Isolated Create Card */}
+        {activeTab === 'prayer' ? (
+          <PrayerCreateCard
+            onSubmit={handleSubmitPrayer}
+            isSubmitting={isSubmittingPrayer}
+          />
+        ) : (
+          <GratitudeCreateCard
+            onSubmit={handleSubmitGratitude}
+            isSubmitting={isSubmittingGratitude}
+          />
+        )}
 
-        {/* 3. Community Wall Header & Filter Pills */}
+        {/* 3. Community Wall Header & Switch Button in line 460 */}
         <View style={styles.headerCardTextCol}>
           <View style={styles.brandRow}>
-            <Text style={styles.secondTitleContent}>Pedidos de la comunidad</Text>
+            <Text style={styles.secondTitleContent}>
+              {activeTab === 'prayer'
+                ? 'Pedidos de la comunidad'
+                : 'Testimonios y Agradecimientos'}
+            </Text>
           </View>
 
-          {/* Mode Switcher: Timeline (New) vs Classic (Fallback) */}
+          {/* Switch Button between Oración and Gratitud (replaces old/new switch) */}
           <View style={styles.viewModeToggleRow}>
             <TouchableOpacity
               style={[
                 styles.viewModeTab,
-                viewMode === 'timeline' && styles.viewModeTabActive,
+                activeTab === 'prayer' && styles.viewModeTabActive,
               ]}
-              onPress={() => setViewMode('timeline')}
+              onPress={() => setActiveTab('prayer')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewModeTabText,
-                  viewMode === 'timeline' && styles.viewModeTabTextActive,
+                  activeTab === 'prayer' && styles.viewModeTabTextActive,
                 ]}
               >
-                Línea de Peticiones
+                Oración
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.viewModeTab,
-                viewMode === 'classic' && styles.viewModeTabActive,
+                activeTab === 'gratitude' && styles.viewModeTabActive,
               ]}
-              onPress={() => setViewMode('classic')}
+              onPress={() => setActiveTab('gratitude')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewModeTabText,
-                  viewMode === 'classic' && styles.viewModeTabTextActive,
+                  activeTab === 'gratitude' && styles.viewModeTabTextActiveGratitude,
                 ]}
               >
-                Tarjetas Clásicas
+                Gratitud
               </Text>
             </TouchableOpacity>
           </View>
 
+          {/* Filter Pills */}
           <FilterPills
-            items={PRAYER_FILTERS}
-            selectedId={selectedFilter}
-            onSelect={setSelectedFilter}
+            items={activeTab === 'prayer' ? PRAYER_FILTERS : GRATITUDE_FILTERS}
+            selectedId={activeTab === 'prayer' ? prayerFilter : gratitudeFilter}
+            onSelect={activeTab === 'prayer' ? setPrayerFilter : setGratitudeFilter}
             style={styles.filterPills}
           />
         </View>
       </View>
     ),
-    [selectedFilter, handleSubmitPrayer, isSubmitting, viewMode]
+    [
+      activeTab,
+      prayerFilter,
+      gratitudeFilter,
+      handleSubmitPrayer,
+      handleSubmitGratitude,
+      isSubmittingPrayer,
+      isSubmittingGratitude,
+    ]
   );
 
-  // Footer: '+ Pedir' button matching reference image
+  // ==========================================================================
+  // LIST FOOTER (+ Pedir / + Agradecer)
+  // ==========================================================================
   const listFooter = useMemo(() => {
-    if (viewMode !== 'timeline') return null;
-
+    const isGratitude = activeTab === 'gratitude';
     return (
       <TouchableOpacity
         style={styles.timelineAddBtnRow}
-        onPress={() => setShowPedirModal(true)}
+        onPress={() => {
+          setModalTitle('');
+          setModalDesc('');
+          setModalAnonymous(false);
+          setShowBottomModal(true);
+        }}
         activeOpacity={0.8}
       >
-        <View style={styles.timelineAddCircle}>
-          <Plus size={14} color={Theme.colors.primary} strokeWidth={2.5} />
+        <View
+          style={[
+            styles.timelineAddCircle,
+            isGratitude && styles.timelineAddCircleGratitude,
+          ]}
+        >
+          <Plus
+            size={14}
+            color={isGratitude ? '#D97706' : Theme.colors.primary}
+            strokeWidth={2.5}
+          />
         </View>
-        <Text style={styles.timelineAddLabel}>Pedir</Text>
+        <Text
+          style={[
+            styles.timelineAddLabel,
+            isGratitude && styles.timelineAddLabelGratitude,
+          ]}
+        >
+          {isGratitude ? 'Agradecer' : 'Pedir'}
+        </Text>
       </TouchableOpacity>
     );
-  }, [viewMode]);
+  }, [activeTab]);
 
+  // ==========================================================================
+  // ITEM RENDERER (ALWAYS TIMELINE CARDS)
+  // ==========================================================================
   const renderItem = useCallback(
-    ({ item, index }: { item: Prayer; index: number }) => {
-      const isJoined = joinedIds.has(item.id);
-
-      if (viewMode === 'classic') {
+    ({ item, index }: { item: TimelineCardItem; index: number }) => {
+      if (activeTab === 'prayer') {
+        const isJoined = joinedPrayers.has(item.id);
         return (
-          <ClassicPrayerCard
+          <TimelinePrayerCard
             item={item}
+            index={index}
             isJoined={isJoined}
+            variant="prayer"
             onPray={handlePray}
-            onShare={handleShare}
-            onOpenComments={handleOpenComments}
-            onPressCard={(p) => setSelectedPrayerDetail(p)}
+            onOpenComments={(p) => handleOpenComments(p, 'prayer')}
+            onPressCard={(p) => setSelectedDetail({ item: p, type: 'prayer' })}
           />
         );
       }
 
+      const isThanked = thankedGratitudes.has(item.id);
       return (
         <TimelinePrayerCard
           item={item}
           index={index}
-          isJoined={isJoined}
-          onPray={handlePray}
-          onOpenComments={handleOpenComments}
-          onPressCard={(p) => setSelectedPrayerDetail(p)}
+          isJoined={isThanked}
+          variant="gratitude"
+          onPray={handleThank}
+          onOpenComments={(g) => handleOpenComments(g, 'gratitude')}
+          onPressCard={(g) => setSelectedDetail({ item: g, type: 'gratitude' })}
         />
       );
     },
-    [viewMode, joinedIds, handlePray, handleShare, handleOpenComments]
+    [activeTab, joinedPrayers, thankedGratitudes, handlePray, handleThank]
   );
+
+  const currentLoading =
+    activeTab === 'prayer' ? isLoadingPrayers : isLoadingGratitudes;
+  const currentData = activeTab === 'prayer' ? filteredPrayers : filteredGratitudes;
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={filteredPrayers}
-        keyExtractor={(item) => String(item.id)}
+        data={currentData}
+        keyExtractor={(item) => `${activeTab}-${item.id}`}
         renderItem={renderItem}
         ListHeaderComponent={listHeader}
         ListFooterComponent={listFooter}
@@ -579,24 +825,29 @@ export default function PrayerWallScreen() {
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
-          !isLoading ? (
+          !currentLoading ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
-                No hay peticiones registradas aún. Sé el primero en elevar una intención.
+                {activeTab === 'prayer'
+                  ? 'No hay peticiones registradas aún. Sé el primero en elevar una intención.'
+                  : 'No hay testimonios registrados aún. Sé el primero en compartir un agradecimiento.'}
               </Text>
             </View>
           ) : (
-            <ActivityIndicator style={{ marginTop: 24 }} color={Theme.colors.tacticalNavy} />
+            <ActivityIndicator
+              style={{ marginTop: 24 }}
+              color={activeTab === 'prayer' ? Theme.colors.tacticalNavy : '#D97706'}
+            />
           )
         }
       />
 
-      {/* MODAL: ELEVAR PETICIÓN VIA '+ PEDIR' BUTTON */}
+      {/* MODAL: BOTTOM '+ PEDIR' / '+ AGRADECER' ACTION */}
       <Modal
-        visible={showPedirModal}
+        visible={showBottomModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowPedirModal(false)}
+        onRequestClose={() => setShowBottomModal(false)}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -605,12 +856,16 @@ export default function PrayerWallScreen() {
           <View style={[styles.newPrayerModalCard, globalStyles.shadowMd]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Elevar Petición</Text>
+                <Text style={styles.modalTitle}>
+                  {activeTab === 'prayer' ? 'Elevar Petición' : 'Compartir Gratitud'}
+                </Text>
                 <Text style={styles.modalSub}>
-                  Publica tu intención para que la comunidad ore contigo
+                  {activeTab === 'prayer'
+                    ? 'Publica tu intención para que la comunidad ore contigo'
+                    : 'Testifica de la bondad de Dios para edificar a la comunidad'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowPedirModal(false)}>
+              <TouchableOpacity onPress={() => setShowBottomModal(false)}>
                 <X size={20} color={Theme.colors.onSurface} />
               </TouchableOpacity>
             </View>
@@ -618,31 +873,53 @@ export default function PrayerWallScreen() {
             <View style={styles.anonToggleRowModal}>
               <TouchableOpacity
                 style={styles.anonToggle}
-                onPress={() => setPedirAnonymous((p) => !p)}
+                onPress={() => setModalAnonymous((p) => !p)}
                 activeOpacity={0.8}
               >
-                <View style={[styles.anonBox, pedirAnonymous && styles.anonBoxActive]}>
-                  {pedirAnonymous && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                <View
+                  style={[
+                    styles.anonBox,
+                    modalAnonymous &&
+                      (activeTab === 'prayer'
+                        ? styles.anonBoxActive
+                        : styles.anonBoxActiveGratitude),
+                  ]}
+                >
+                  {modalAnonymous && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
                 </View>
                 <Text style={styles.anonText}>Publicar como Anónimo</Text>
               </TouchableOpacity>
             </View>
 
+            {activeTab === 'gratitude' && (
+              <TextInput
+                style={styles.modalTitleInput}
+                placeholder="Título del agradecimiento..."
+                placeholderTextColor="#94A3B8"
+                value={modalTitle}
+                onChangeText={setModalTitle}
+              />
+            )}
+
             <TextInput
               style={styles.modalPrayerTextInput}
-              placeholder="Escribe tu petición de oración o motivo de intercesión..."
+              placeholder={
+                activeTab === 'prayer'
+                  ? 'Escribe tu petición de oración o motivo de intercesión...'
+                  : 'Describe el testimonio, bendición recibida o motivo de gratitud...'
+              }
               placeholderTextColor="#94A3B8"
               multiline
-              numberOfLines={6}
-              value={pedirText}
-              onChangeText={setPedirText}
+              numberOfLines={5}
+              value={modalDesc}
+              onChangeText={setModalDesc}
               textAlignVertical="top"
             />
 
             <View style={styles.modalActionRow}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
-                onPress={() => setShowPedirModal(false)}
+                onPress={() => setShowBottomModal(false)}
               >
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
@@ -650,17 +927,27 @@ export default function PrayerWallScreen() {
               <TouchableOpacity
                 style={[
                   styles.modalSubmitBtn,
-                  (!pedirText.trim() || isSubmittingPedir) && styles.modalSubmitBtnDisabled,
+                  activeTab === 'gratitude' && styles.modalSubmitBtnGratitude,
+                  (!modalDesc.trim() || isSubmittingModal) && styles.modalSubmitBtnDisabled,
                 ]}
-                onPress={handleSubmitPedirModal}
-                disabled={!pedirText.trim() || isSubmittingPedir}
+                onPress={handleSubmitBottomModal}
+                disabled={!modalDesc.trim() || isSubmittingModal}
               >
-                {isSubmittingPedir ? (
+                {isSubmittingModal ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Send size={14} color="#FFFFFF" />
-                    <Text style={styles.modalSubmitText}>Pedir Oración</Text>
+                    {activeTab === 'prayer' ? (
+                      <>
+                        <Send size={14} color="#FFFFFF" />
+                        <Text style={styles.modalSubmitText}>Pedir Oración</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={14} color="#FFFFFF" />
+                        <Text style={styles.modalSubmitText}>Dar Gracias</Text>
+                      </>
+                    )}
                   </>
                 )}
               </TouchableOpacity>
@@ -669,27 +956,41 @@ export default function PrayerWallScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* FULL PRAYER DETAIL MODAL (WHEN CARD IS TAPPED) */}
+      {/* FULL DETAIL MODAL (WHEN CARD IS TAPPED) */}
       <Modal
-        visible={Boolean(selectedPrayerDetail)}
+        visible={Boolean(selectedDetail)}
         transparent
         animationType="slide"
-        onRequestClose={() => setSelectedPrayerDetail(null)}
+        onRequestClose={() => setSelectedDetail(null)}
       >
         <View style={styles.modalBackdrop}>
           <View style={[styles.detailModalCard, globalStyles.shadowMd]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <View style={styles.detailBadgeRow}>
-                  <HeartHandshake size={14} color="#0c7ae0" />
-                  <Text style={styles.detailBadgeText}>PETICIÓN EN COBERTURA</Text>
+                  {selectedDetail?.type === 'prayer' ? (
+                    <>
+                      <HeartHandshake size={14} color="#0c7ae0" />
+                      <Text style={styles.detailBadgeText}>PETICIÓN EN COBERTURA</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} color="#D97706" />
+                      <Text style={[styles.detailBadgeText, { color: '#D97706' }]}>
+                        TESTIMONIO DE GRATITUD
+                      </Text>
+                    </>
+                  )}
                 </View>
                 <Text style={styles.modalTitle} numberOfLines={2}>
-                  {selectedPrayerDetail?.title || 'Petición Comunitaria'}
+                  {selectedDetail?.item.title ||
+                    (selectedDetail?.type === 'prayer'
+                      ? 'Petición Comunitaria'
+                      : 'Testimonio de Fe')}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setSelectedPrayerDetail(null)}
+                onPress={() => setSelectedDetail(null)}
                 style={styles.modalCloseBtn}
               >
                 <X size={20} color={Theme.colors.onSurface} />
@@ -698,43 +999,60 @@ export default function PrayerWallScreen() {
 
             <ScrollView style={styles.detailModalScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.detailAuthorCard}>
-                <View style={styles.detailAuthorAvatar}>
+                <View
+                  style={[
+                    styles.detailAuthorAvatar,
+                    selectedDetail?.type === 'gratitude' && styles.detailAuthorAvatarGratitude,
+                  ]}
+                >
                   <Text style={styles.detailAuthorAvatarText}>
-                    {(selectedPrayerDetail?.authorName || 'O')[0].toUpperCase()}
+                    {(selectedDetail?.item.authorName || 'O')[0].toUpperCase()}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailAuthorName}>
-                    {selectedPrayerDetail?.isAnonymous
+                    {selectedDetail?.item.isAnonymous
                       ? 'Oficial Reservado'
-                      : selectedPrayerDetail?.authorName || 'Camarada en Servicio'}
+                      : selectedDetail?.item.authorName || 'Camarada en Servicio'}
                   </Text>
                   <Text style={styles.detailAuthorDate}>
-                    {selectedPrayerDetail?.createdAt
-                      ? new Date(selectedPrayerDetail.createdAt).toLocaleDateString('es-AR', {
+                    {selectedDetail?.item.createdAt
+                      ? new Date(selectedDetail.item.createdAt).toLocaleDateString('es-AR', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric',
                         })
                       : 'Activa'}{' '}
-                    • Amparo Pastoral
+                    • {selectedDetail?.type === 'prayer' ? 'Amparo Pastoral' : 'Acción de Gracias'}
                   </Text>
                 </View>
-                <View style={styles.detailActiveBadge}>
-                  <Text style={styles.detailActiveBadgeText}>ACTIVA</Text>
+                <View
+                  style={[
+                    styles.detailActiveBadge,
+                    selectedDetail?.type === 'gratitude' && styles.detailActiveBadgeGratitude,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.detailActiveBadgeText,
+                      selectedDetail?.type === 'gratitude' && styles.detailActiveBadgeTextGratitude,
+                    ]}
+                  >
+                    {selectedDetail?.type === 'prayer' ? 'ACTIVA' : 'TESTIMONIO'}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.detailBodyBox}>
                 <Text style={styles.detailBodyText}>
-                  {selectedPrayerDetail?.description}
+                  {selectedDetail?.item.description}
                 </Text>
               </View>
 
-              {Array.isArray(selectedPrayerDetail?.content) &&
-                selectedPrayerDetail.content.length > 0 && (
+              {Array.isArray(selectedDetail?.item.content) &&
+                selectedDetail.item.content.length > 0 && (
                   <View style={styles.detailContentList}>
-                    {selectedPrayerDetail.content.map((bullet, idx) => (
+                    {selectedDetail.item.content.map((bullet, idx) => (
                       <View key={idx} style={styles.detailBulletRow}>
                         <View style={styles.detailBulletDot} />
                         <Text style={styles.detailBulletText}>{bullet}</Text>
@@ -744,51 +1062,89 @@ export default function PrayerWallScreen() {
                 )}
             </ScrollView>
 
-            {selectedPrayerDetail && (
+            {selectedDetail && (
               <View style={styles.detailBottomActionBar}>
-                <TouchableOpacity
-                  style={[
-                    styles.detailPrayBtn,
-                    joinedIds.has(selectedPrayerDetail.id) && styles.detailPrayBtnActive,
-                  ]}
-                  onPress={() => handlePray(selectedPrayerDetail.id)}
-                  activeOpacity={0.8}
-                >
-                  <Heart
-                    size={18}
-                    color={joinedIds.has(selectedPrayerDetail.id) ? '#EF4444' : '#0c7ae0'}
-                    fill={joinedIds.has(selectedPrayerDetail.id) ? '#EF4444' : 'transparent'}
-                  />
-                  <Text
+                {selectedDetail.type === 'prayer' ? (
+                  <TouchableOpacity
                     style={[
-                      styles.detailPrayBtnText,
-                      joinedIds.has(selectedPrayerDetail.id) && styles.detailPrayBtnTextActive,
+                      styles.detailPrayBtn,
+                      joinedPrayers.has(selectedDetail.item.id) && styles.detailPrayBtnActive,
                     ]}
+                    onPress={() => handlePray(selectedDetail.item.id)}
+                    activeOpacity={0.8}
                   >
-                    {joinedIds.has(selectedPrayerDetail.id)
-                      ? `En oración (${selectedPrayerDetail.prayerCount})`
-                      : `Unirme en oración (${selectedPrayerDetail.prayerCount})`}
-                  </Text>
-                </TouchableOpacity>
+                    <Heart
+                      size={18}
+                      color={
+                        joinedPrayers.has(selectedDetail.item.id) ? '#EF4444' : '#0c7ae0'
+                      }
+                      fill={
+                        joinedPrayers.has(selectedDetail.item.id) ? '#EF4444' : 'transparent'
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.detailPrayBtnText,
+                        joinedPrayers.has(selectedDetail.item.id) &&
+                          styles.detailPrayBtnTextActive,
+                      ]}
+                    >
+                      {joinedPrayers.has(selectedDetail.item.id)
+                        ? `En oración (${selectedDetail.item.prayerCount})`
+                        : `Unirme en oración (${selectedDetail.item.prayerCount})`}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.detailThankBtn,
+                      thankedGratitudes.has(selectedDetail.item.id) &&
+                        styles.detailThankBtnActive,
+                    ]}
+                    onPress={() => handleThank(selectedDetail.item.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Sparkles
+                      size={18}
+                      color={
+                        thankedGratitudes.has(selectedDetail.item.id) ? '#D97706' : '#64748B'
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.detailThankBtnText,
+                        thankedGratitudes.has(selectedDetail.item.id) &&
+                          styles.detailThankBtnTextActive,
+                      ]}
+                    >
+                      {thankedGratitudes.has(selectedDetail.item.id)
+                        ? `Amén / Gracias (${(selectedDetail.item as Gratitude).gratitudeCount ?? selectedDetail.item.prayerCount})`
+                        : `Doy gracias (${(selectedDetail.item as Gratitude).gratitudeCount ?? selectedDetail.item.prayerCount})`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={styles.detailCommentBtn}
                   onPress={() => {
-                    const prayer = selectedPrayerDetail;
-                    setSelectedPrayerDetail(null);
-                    handleOpenComments(prayer);
+                    const target = selectedDetail;
+                    setSelectedDetail(null);
+                    handleOpenComments(target.item, target.type);
                   }}
                   activeOpacity={0.8}
                 >
-                  <MessageSquare size={17} color="#0c7ae0" />
+                  <MessageSquare
+                    size={17}
+                    color={selectedDetail.type === 'prayer' ? '#0c7ae0' : '#D97706'}
+                  />
                   <Text style={styles.detailCommentBtnText}>
-                    {selectedPrayerDetail.commentCount ?? 0}
+                    {selectedDetail.item.commentCount ?? 0}
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.detailShareBtn}
-                  onPress={() => handleShare(selectedPrayerDetail)}
+                  onPress={() => handleShare(selectedDetail.item)}
                   activeOpacity={0.8}
                 >
                   <Share2 size={17} color="#64748B" />
@@ -799,12 +1155,12 @@ export default function PrayerWallScreen() {
         </View>
       </Modal>
 
-      {/* Prayer Comments Modal (Section 5.4 & 5.5) */}
+      {/* COMMENTS MODAL (SUPPORTING BOTH PRAYER & GRATITUDE) */}
       <Modal
-        visible={Boolean(activePrayerForComments)}
+        visible={Boolean(activeCommentTarget)}
         transparent
         animationType="slide"
-        onRequestClose={() => setActivePrayerForComments(null)}
+        onRequestClose={() => setActiveCommentTarget(null)}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -813,28 +1169,41 @@ export default function PrayerWallScreen() {
           <View style={[styles.commentsModalCard, globalStyles.shadowMd]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 8 }}>
-                <Text style={styles.modalTitle}>Palabras de Aliento & Oración</Text>
+                <Text style={styles.modalTitle}>
+                  {activeCommentTarget?.type === 'prayer'
+                    ? 'Palabras de Aliento & Oración'
+                    : 'Palabras de Celebración & Fe'}
+                </Text>
                 <Text style={styles.modalSub} numberOfLines={1}>
-                  {activePrayerForComments?.title || activePrayerForComments?.description}
+                  {activeCommentTarget?.item.title || activeCommentTarget?.item.description}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setActivePrayerForComments(null)}>
+              <TouchableOpacity onPress={() => setActiveCommentTarget(null)}>
                 <X size={20} color={Theme.colors.onSurface} />
               </TouchableOpacity>
             </View>
 
-            {/* Comments List formatted like cards */}
+            {/* Comments List */}
             <ScrollView style={styles.commentsList} showsVerticalScrollIndicator={false}>
               {isLoadingComments ? (
                 <View style={styles.commentsLoading}>
-                  <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      activeCommentTarget?.type === 'prayer'
+                        ? Theme.colors.tacticalNavy
+                        : '#D97706'
+                    }
+                  />
                   <Text style={styles.commentsLoadingText}>Cargando mensajes de bendición...</Text>
                 </View>
               ) : comments.length === 0 ? (
                 <View style={styles.commentsEmpty}>
                   <Text style={styles.commentsEmptyTitle}>Aún no hay comentarios</Text>
                   <Text style={styles.commentsEmptyText}>
-                    Sé el primero en dejar palabras de fortaleza para esta petición.
+                    {activeCommentTarget?.type === 'prayer'
+                      ? 'Sé el primero en dejar palabras de fortaleza para esta petición.'
+                      : 'Sé el primero en celebrar y agradecer junto a este testimonio.'}
                   </Text>
                 </View>
               ) : (
@@ -842,8 +1211,20 @@ export default function PrayerWallScreen() {
                   <View key={comment.id} style={styles.commentTimelineCard}>
                     <View style={styles.commentCardHeader}>
                       <View style={styles.commentAuthorLeft}>
-                        <View style={styles.commentInitialCircle}>
-                          <Text style={styles.commentInitialText}>
+                        <View
+                          style={[
+                            styles.commentInitialCircle,
+                            activeCommentTarget?.type === 'gratitude' &&
+                              styles.commentInitialCircleGratitude,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.commentInitialText,
+                              activeCommentTarget?.type === 'gratitude' &&
+                                styles.commentInitialTextGratitude,
+                            ]}
+                          >
                             {(comment.authorName || 'C')[0].toUpperCase()}
                           </Text>
                         </View>
@@ -865,7 +1246,7 @@ export default function PrayerWallScreen() {
                               hour: '2-digit',
                               minute: '2-digit',
                             })}{' '}
-                            • En Cobertura
+                            • {activeCommentTarget?.type === 'prayer' ? 'En Cobertura' : 'Comunidad'}
                           </Text>
                         </View>
                       </View>
@@ -877,12 +1258,16 @@ export default function PrayerWallScreen() {
               )}
             </ScrollView>
 
-            {/* Post Comment Input Bar (Section 5.4) */}
+            {/* Post Comment Input Bar */}
             {user ? (
               <View style={styles.commentInputRow}>
                 <TextInput
                   style={styles.commentTextInput}
-                  placeholder="Escribí palabras de fe o aliento..."
+                  placeholder={
+                    activeCommentTarget?.type === 'prayer'
+                      ? 'Escribí palabras de fe o aliento...'
+                      : 'Escribí palabras de celebración o gratitud...'
+                  }
                   placeholderTextColor={Theme.colors.onSurfaceVariant}
                   value={commentText}
                   onChangeText={setCommentText}
@@ -890,6 +1275,7 @@ export default function PrayerWallScreen() {
                 <TouchableOpacity
                   style={[
                     styles.commentSendBtn,
+                    activeCommentTarget?.type === 'gratitude' && styles.commentSendBtnGratitude,
                     (!commentText.trim() || isPostingComment) && styles.commentSendBtnDisabled,
                   ]}
                   onPress={handlePostComment}
@@ -907,7 +1293,7 @@ export default function PrayerWallScreen() {
               <View style={styles.commentAnonNote}>
                 <Lock size={14} color={Theme.colors.onSurfaceVariant} />
                 <Text style={styles.commentAnonNoteText}>
-                  Iniciá sesión para publicar palabras de aliento a esta petición.
+                  Iniciá sesión para publicar palabras de aliento o celebración.
                 </Text>
               </View>
             )}
@@ -999,15 +1385,46 @@ const styles = StyleSheet.create({
   anonBoxActive: {
     backgroundColor: Theme.colors.secondary,
   },
+  anonBoxActiveGratitude: {
+    backgroundColor: '#D97706',
+  },
   anonText: {
     ...globalStyles.bodySm,
     fontSize: 11,
     color: Theme.colors.onSurfaceVariant,
   },
+  quoteRow: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  scriptureQuote: {
+    ...globalStyles.bodySm,
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: Theme.colors.onSurfaceVariant,
+  },
+  scriptureRef: {
+    ...globalStyles.labelCaps,
+    fontSize: 8,
+    fontStyle: 'normal',
+    color: Theme.colors.secondary,
+  },
   textAreaContainer: {
     backgroundColor: Theme.colors.surfaceContainerLow,
     borderRadius: Theme.roundness.md,
     padding: 10,
+  },
+  gratitudeTitleInput: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: Theme.colors.onSurface,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   textArea: {
     fontFamily: Theme.fonts.body,
@@ -1026,35 +1443,36 @@ const styles = StyleSheet.create({
     width: 'auto',
     paddingHorizontal: 14,
   },
-  galatiansQuoteRow: {
-    marginTop: 4,
-    marginBottom: 8,
+  submitGratitudeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#D97706',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Theme.roundness.md,
   },
-  galatiansQuote: {
-    ...globalStyles.bodySm,
-    fontSize: 11,
-    fontStyle: 'italic',
-    color: Theme.colors.onSurfaceVariant,
+  submitGratitudeBtnDisabled: {
+    opacity: 0.5,
   },
-  galatiansRef: {
-    ...globalStyles.labelCaps,
-    fontSize: 8,
-    fontStyle: 'normal',
-    color: Theme.colors.secondary,
+  submitGratitudeBtnText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: '#FFFFFF',
   },
 
-  // View Mode Switcher
+  // View Mode Switcher: Oración vs Gratitud
   viewModeToggleRow: {
     flexDirection: 'row',
     backgroundColor: '#E2E8F0',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 3,
     marginBottom: 12,
   },
   viewModeTab: {
     flex: 1,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 7,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1068,202 +1486,41 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
       },
       android: {
-        elevation: 1,
+        elevation: 1.5,
       },
     }),
   },
   viewModeTabText: {
     fontFamily: Theme.fonts.body,
-    fontSize: 11.5,
+    fontSize: 12,
     color: '#64748B',
+    fontWeight: '500',
   },
   viewModeTabTextActive: {
     fontFamily: Theme.fonts.bodySemiBold,
-    color: '#0F172A',
+    color: '#0c7ae0',
+    fontWeight: '700',
+  },
+  viewModeTabTextActiveGratitude: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: '#D97706',
+    fontWeight: '700',
   },
 
-  // ============================================================================
-  // TIMELINE POST STYLES (MATCHING REFERENCE DESIGN)
-  // ============================================================================
-  timelineRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginBottom: 2,
-  },
-  timelineCol: {
-    width: 32,
-    alignItems: 'center',
-    marginRight: 10,
-    paddingTop: 12,
-  },
-  timelineCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Theme.colors.primary, // App brand blue (#0c7ae0)
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.15,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  timelineNumberText: {
-    fontFamily: Theme.fonts.headlineBold,
-    fontSize: 11,
-    color: '#FFFFFF',
-  },
-  timelineConnectorWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    minHeight: 36,
-    position: 'relative',
-  },
-  timelineConnectorLine: {
-    width: 1.5,
-    flex: 1,
-    backgroundColor: '#CBD5E1',
-  },
-  timelineArrowBadge: {
-    position: 'absolute',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 7,
-    padding: 1,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    zIndex: 2,
-  },
-  timelineCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 1.5,
-      },
-    }),
-  },
-  timelineCardBody: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  timelineCardHeader: {
-    marginBottom: 6,
-  },
-  timelineTitleCol: {
-    flex: 1,
-  },
-  timelineCardTitle: {
-    fontFamily: Theme.fonts.headlineBold,
-    fontSize: 13.5,
-    color: '#0F172A',
-    letterSpacing: 0.2,
-  },
-  timelineCardAuthorSub: {
-    fontFamily: Theme.fonts.body,
-    fontSize: 10.5,
-    color: Theme.colors.primary,
-    marginTop: 2,
-  },
-  timelineBulletsList: {
-    gap: 3,
-    marginTop: 2,
-  },
-  timelineBulletRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 5,
-  },
-  timelineBulletDot: {
-    fontSize: 12,
-    color: '#64748B',
-    lineHeight: 18,
-  },
-  timelineBulletText: {
-    flex: 1,
-    fontFamily: Theme.fonts.body,
-    fontSize: 11,
-    color: '#64748B',
-    lineHeight: 16,
-  },
-  timelineBulletTextPrimary: {
-    color: '#1E293B',
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  timelineActionCol: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingLeft: 6,
-    borderLeftWidth: 1,
-    borderLeftColor: '#F1F5F9',
-  },
-  timelineHeartBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 3,
-  },
-  timelineHeartBtnActive: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
-  },
-  timelineActionCount: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 9.5,
-    color: '#64748B',
-    marginTop: 1,
-  },
-  timelineActionCountActive: {
-    color: '#EF4444',
-  },
-  timelineCommentBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  // Timeline list & footer
   timelineAddBtnRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 4,
-    paddingVertical: 10,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    marginTop: 6,
     marginBottom: 20,
-    gap: 10,
   },
   timelineAddCircle: {
     width: 24,
@@ -1274,17 +1531,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
+  },
+  timelineAddCircleGratitude: {
+    borderColor: '#D97706',
+    backgroundColor: '#FEF3C7',
   },
   timelineAddLabel: {
     fontFamily: Theme.fonts.headlineBold,
@@ -1292,116 +1542,19 @@ const styles = StyleSheet.create({
     color: Theme.colors.primary,
     letterSpacing: 0.2,
   },
+  timelineAddLabelGratitude: {
+    color: '#D97706',
+  },
 
-  // ============================================================================
-  // CLASSIC PRAYER CARD STYLES (ORIGINAL)
-  // ============================================================================
-  prayerCard: {
-    marginBottom: 12,
-  },
-  prayerCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  authorAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Theme.colors.surfaceContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  authorCol: {
-    justifyContent: 'center',
-  },
-  authorName: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 13,
-    color: Theme.colors.onSurface,
-  },
-  authorTime: {
-    ...globalStyles.labelCaps,
-    fontSize: 9,
-    color: Theme.colors.onSurfaceVariant,
-  },
-  prayerDescription: {
-    fontFamily: Theme.fonts.body,
-    fontSize: 14,
-    lineHeight: 21,
-    color: Theme.colors.onSurface,
-    marginBottom: 12,
-  },
-  prayerCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  joinPrayBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Theme.colors.surfaceContainerLow,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Theme.roundness.md,
-    gap: 6,
-  },
-  joinPrayBtnActive: {
-    backgroundColor: Theme.colors.tacticalNavy,
-  },
-  joinPrayText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 12,
-    color: Theme.colors.tacticalNavy,
-  },
-  joinPrayTextActive: {
-    color: '#FFFFFF',
-  },
-  prayerCountBadge: {
-    backgroundColor: 'rgba(37, 82, 126, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: Theme.roundness.full,
-  },
-  prayerCountBadgeActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  prayerCountText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 10,
-    color: Theme.colors.tacticalNavy,
-  },
-  prayerCountTextActive: {
-    color: '#FFFFFF',
-  },
   emptyContainer: {
     paddingVertical: 32,
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   emptyText: {
     ...globalStyles.bodySm,
     color: Theme.colors.onSurfaceVariant,
     textAlign: 'center',
-  },
-  commentActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Theme.colors.surfaceContainerLow,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Theme.roundness.md,
-    gap: 6,
-  },
-  commentActionText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 12,
-    color: Theme.colors.tacticalNavy,
   },
 
   // Modals
@@ -1415,8 +1568,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    height: '70%',
-    maxHeight: '75%',
+    maxHeight: '85%',
     minHeight: 380,
     justifyContent: 'space-between',
   },
@@ -1438,7 +1590,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   anonToggleRowModal: {
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  modalTitleInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: '#0F172A',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   modalPrayerTextInput: {
     backgroundColor: '#F8FAFC',
@@ -1447,8 +1611,7 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body,
     fontSize: 13.5,
     color: '#0F172A',
-    flex: 1,
-    minHeight: 140,
+    minHeight: 120,
     textAlignVertical: 'top',
     marginBottom: 16,
     borderWidth: 1,
@@ -1477,7 +1640,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: '#2D5A43',
+    backgroundColor: '#0c7ae0',
+  },
+  modalSubmitBtnGratitude: {
+    backgroundColor: '#D97706',
   },
   modalSubmitBtnDisabled: {
     opacity: 0.5,
@@ -1488,7 +1654,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Detail Modal Styles (When Card is tapped)
+  // Detail Modal Styles
   detailModalCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
@@ -1542,6 +1708,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  detailAuthorAvatarGratitude: {
+    backgroundColor: '#D97706',
+  },
   detailAuthorAvatarText: {
     fontFamily: Theme.fonts.headlineBold,
     fontSize: 15,
@@ -1554,25 +1723,29 @@ const styles = StyleSheet.create({
   },
   detailAuthorDate: {
     fontFamily: Theme.fonts.body,
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 1,
   },
   detailActiveBadge: {
     backgroundColor: '#EFF6FF',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderRadius: 6,
+  },
+  detailActiveBadgeGratitude: {
+    backgroundColor: '#FEF3C7',
   },
   detailActiveBadgeText: {
-    fontFamily: Theme.fonts.headlineBold,
-    fontSize: 9.5,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 10,
     color: '#0c7ae0',
   },
+  detailActiveBadgeTextGratitude: {
+    color: '#D97706',
+  },
   detailBodyBox: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
@@ -1586,36 +1759,35 @@ const styles = StyleSheet.create({
     color: '#1E293B',
   },
   detailContentList: {
-    gap: 8,
-    marginBottom: 14,
+    gap: 6,
+    marginTop: 4,
   },
   detailBulletRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    paddingHorizontal: 6,
   },
   detailBulletDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#0c7ae0',
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#94A3B8',
     marginTop: 7,
   },
   detailBulletText: {
     flex: 1,
     fontFamily: Theme.fonts.body,
-    fontSize: 13,
+    fontSize: 12.5,
     color: '#475569',
     lineHeight: 18,
   },
   detailBottomActionBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: '#E2E8F0',
   },
   detailPrayBtn: {
     flex: 1,
@@ -1623,39 +1795,64 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#EFF6FF',
     paddingVertical: 12,
     borderRadius: 14,
+    backgroundColor: '#EFF6FF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
   },
   detailPrayBtnActive: {
     backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    borderColor: '#FCA5A5',
   },
   detailPrayBtnText: {
-    fontFamily: Theme.fonts.headlineBold,
+    fontFamily: Theme.fonts.bodySemiBold,
     fontSize: 13,
     color: '#0c7ae0',
   },
   detailPrayBtnTextActive: {
     color: '#EF4444',
   },
-  detailCommentBtn: {
+  detailThankBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F0F9FF',
-    paddingHorizontal: 16,
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 12,
     borderRadius: 14,
+    backgroundColor: '#FEF3C7',
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#FDE68A',
+  },
+  detailThankBtnActive: {
+    backgroundColor: '#FDE68A',
+    borderColor: '#F59E0B',
+  },
+  detailThankBtnText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: '#D97706',
+  },
+  detailThankBtnTextActive: {
+    color: '#B45309',
+  },
+  detailCommentBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   detailCommentBtnText: {
-    fontFamily: Theme.fonts.headlineBold,
-    fontSize: 13,
-    color: '#0c7ae0',
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 11,
+    color: '#475569',
   },
   detailShareBtn: {
     width: 44,
@@ -1675,27 +1872,26 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     padding: 20,
     height: '75%',
-    maxHeight: '80%',
-    justifyContent: 'space-between',
+    maxHeight: '85%',
   },
   commentsList: {
     flex: 1,
-    marginBottom: 14,
+    marginVertical: 10,
   },
   commentsLoading: {
-    paddingVertical: 24,
+    paddingVertical: 32,
     alignItems: 'center',
     gap: 8,
   },
   commentsLoadingText: {
-    ...globalStyles.bodySm,
-    fontSize: 11,
-    color: Theme.colors.onSurfaceVariant,
+    fontSize: 12,
+    color: '#64748B',
+    fontFamily: Theme.fonts.body,
   },
   commentsEmpty: {
-    paddingVertical: 28,
+    paddingVertical: 32,
     alignItems: 'center',
-    gap: 4,
+    paddingHorizontal: 20,
   },
   commentsEmptyTitle: {
     fontFamily: Theme.fonts.bodySemiBold,
@@ -1707,6 +1903,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Theme.colors.onSurfaceVariant,
     textAlign: 'center',
+    marginTop: 4,
   },
   commentTimelineCard: {
     backgroundColor: '#FFFFFF',
@@ -1745,10 +1942,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  commentInitialCircleGratitude: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
   commentInitialText: {
     fontFamily: Theme.fonts.headlineBold,
     fontSize: 13,
     color: '#0c7ae0',
+  },
+  commentInitialTextGratitude: {
+    color: '#D97706',
   },
   commentTitleCol: {
     flex: 1,
@@ -1812,6 +2016,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.tacticalNavy,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  commentSendBtnGratitude: {
+    backgroundColor: '#D97706',
   },
   commentSendBtnDisabled: {
     backgroundColor: Theme.colors.surfaceContainerHigh,

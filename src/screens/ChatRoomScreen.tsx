@@ -17,17 +17,23 @@ export default function ChatRoomScreen({
   const assignedCall = useChaplainStore((state) => state.assignedCall);
   const user = useAuthStore((state) => state.user);
 
-  const session = currentSession || assignedCall;
-  const sessionId = session?.sessionId;
-  const clientToken = session?.clientToken || undefined;
-
   const isChaplainRole =
     user?.role === 'CHAPLAIN' ||
     user?.role === 'CHAPLAIN_LEADER' ||
     user?.role === 'SUPERUSER';
 
+  // For chaplains, assignedCall is the authoritative incoming session.
+  // For basic users, currentSession is the requested session.
+  const session = isChaplainRole
+    ? (assignedCall || currentSession)
+    : (currentSession || assignedCall);
+
+  const sessionId = session?.sessionId;
+  const clientToken = session?.clientToken || undefined;
+
   return (
     <ChatRoomView
+      key={sessionId ? `chat-room-${sessionId}` : 'empty-room'}
       sessionId={sessionId}
       clientToken={clientToken}
       isChaplainMode={isChaplainRole}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  View,
   ScrollView,
   StyleSheet,
   Alert,
@@ -13,7 +14,8 @@ import { request, setClientToken } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAppInsets } from '../lib/safeArea';
 import DutyConsole from '../components/duty/DutyConsole';
-import NewReportModal from '../components/reports/NewReportModal';
+import { NewReportModalPreview } from '../components/reports/NewReportModalPreview';
+import { SharedDashboardWidgets, DashboardHeader } from '../components/dashboard';
 import type { CallResponse, SessionType, PostCallReport } from '../types/api';
 
 export interface ChaplainDashboardProps {
@@ -22,7 +24,10 @@ export interface ChaplainDashboardProps {
   lastEndedSessionId: number | null;
   onClearEndedSession: () => void;
   onNavigateToInformes?: () => void;
-  onNavigatePrayerWall?: () => void;
+  onNavigatePrayerWall?: (initialTab?: 'prayer' | 'gratitude') => void;
+  onNavigateToBible?: () => void;
+  onNavigateToContent?: () => void;
+  onNavigateToBlogs?: () => void;
 }
 
 export default function ChaplainDashboard({
@@ -32,6 +37,9 @@ export default function ChaplainDashboard({
   onClearEndedSession,
   onNavigateToInformes,
   onNavigatePrayerWall,
+  onNavigateToBible,
+  onNavigateToContent,
+  onNavigateToBlogs,
 }: ChaplainDashboardProps) {
   const { width } = useWindowDimensions();
   const insets = useAppInsets();
@@ -66,7 +74,17 @@ export default function ChaplainDashboard({
     }
   };
 
-  const handleAcceptCall = (sessionType: SessionType) => {
+  const handleAcceptCall = async (sessionType: SessionType) => {
+    try {
+      const refreshed = await request<CallResponse>(ENDPOINTS.CALLS_ASSIGNED);
+      if (refreshed) {
+        setAssignedCall(refreshed);
+        useCallStore.getState().setSession(refreshed);
+      }
+    } catch (err) {
+      console.warn('[ChaplainDashboard] Error claiming assigned call:', err);
+    }
+
     if (sessionType === 'CHAT') {
       onJoinChat();
     } else {
@@ -77,19 +95,28 @@ export default function ChaplainDashboard({
   const isTablet = width > 500;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingBottom: Math.max(insets.bottom, 20) + 100 },
-        isTablet && styles.tabletContent,
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Duty Console matching Stitch: Header + Radar + KPIs + Bitácora Preview + Muro Preview */}
-      <DutyConsole
+    <View style={styles.container}>
+      {/* Top Header Bar: App Logo + Name/Email */}
+      <DashboardHeader
         user={user}
-        isOnline={status === 'ONLINE'}
+        greeting="Servicio Pastoral"
+        roleBadge="CAPELLÁN"
+      />
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) + 100 },
+          isTablet && styles.tabletContent,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Duty Console matching Stitch: Header + Radar + KPIs + Bitácora Preview + Muro Preview */}
+        <DutyConsole
+          user={user}
+          hideHeader={true}
+          isOnline={status === 'ONLINE'}
         isToggling={isToggling}
         onToggleOnline={handleToggle}
         incomingCall={assignedCall}
@@ -108,8 +135,21 @@ export default function ChaplainDashboard({
         }}
       />
 
-      {/* New Report Modal */}
-      <NewReportModal
+      {/* 2. SHARED DASHBOARD WIDGETS (Perlita, Muro de Oración, Contenidos, Roster, Confidencialidad) */}
+      <View style={styles.sharedWidgetsWrapper}>
+        <SharedDashboardWidgets
+          onNavigateToBible={onNavigateToBible}
+          onNavigateToContent={onNavigateToContent}
+          onNavigateToPrayers={onNavigatePrayerWall}
+          onNavigateToBlogs={onNavigateToBlogs}
+          onJoinCall={onJoinCall}
+          onJoinChat={onJoinChat}
+          showRoster={true}
+        />
+      </View>
+
+      {/* New Report Modal Preview */}
+      <NewReportModalPreview
         visible={showReportModal}
         sessionId={selectedSessionId || lastEndedSessionId || null}
         onClose={() => {
@@ -128,6 +168,7 @@ export default function ChaplainDashboard({
         }}
       />
     </ScrollView>
+    </View>
   );
 }
 
@@ -144,5 +185,9 @@ const styles = StyleSheet.create({
     maxWidth: 540,
     width: '100%',
     alignSelf: 'center',
+  },
+  sharedWidgetsWrapper: {
+    marginTop: 16,
+    width: '100%',
   },
 });

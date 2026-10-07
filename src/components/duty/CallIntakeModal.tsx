@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   View,
@@ -10,15 +10,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
+  Animated,
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
 import {
-  HeartHandshake,
   Video,
   MessageSquare,
   ShieldCheck,
   X,
-  AlertCircle,
+  HeartHandshake,
+  Check,
 } from 'lucide-react-native';
 import type { CallIntake, IntakeReason, SessionType } from '../../types/api';
 
@@ -30,20 +31,20 @@ export interface CallIntakeModalProps {
   isSubmitting?: boolean;
 }
 
-const MOOD_OPTIONS: { score: number; label: string; color: string }[] = [
-  { score: 1, label: 'Tranquilo', color: '#10B981' },
-  { score: 2, label: 'Inquieto', color: '#06B6D4' },
-  { score: 3, label: 'Preocupado', color: '#F59E0B' },
-  { score: 4, label: 'Angustiado / Enojado', color: '#F97316' },
-  { score: 5, label: 'Muy angustiado / Muy enojado', color: '#EF4444' },
+const MOOD_OPTIONS: { score: number; label: string; sub: string; color: string; bg: string }[] = [
+  { score: 1, label: 'Tranquilo', sub: 'En calma', color: '#059669', bg: '#ECFDF5' },
+  { score: 2, label: 'Inquieto', sub: 'Algo de tensión', color: '#0284C7', bg: '#F0F9FF' },
+  { score: 3, label: 'Preocupado', sub: 'Carga mental o familiar', color: '#D97706', bg: '#FFFBEB' },
+  { score: 4, label: 'Angustiado', sub: 'Presión / Estrés alto', color: '#EA580C', bg: '#FFF7ED' },
+  { score: 5, label: 'Crítico', sub: 'Desborde o crisis', color: '#DC2626', bg: '#FEF2F2' },
 ];
 
 const REASON_OPTIONS: { key: IntakeReason; label: string }[] = [
-  { key: 'FAMILIAR', label: 'Familiar' },
-  { key: 'TRABAJO', label: 'Trabajo / Servicio' },
-  { key: 'ECONOMICO', label: 'Económico' },
-  { key: 'FE', label: 'Fe / Espiritual' },
-  { key: 'OTRO', label: 'Otro' },
+  { key: 'FAMILIAR', label: 'Familiar / Pareja' },
+  { key: 'TRABAJO', label: 'Servicio / Operativo' },
+  { key: 'ECONOMICO', label: 'Económico / Legal' },
+  { key: 'FE', label: 'Espiritual / Fe' },
+  { key: 'OTRO', label: 'Situación Personal' },
 ];
 
 export default function CallIntakeModal({
@@ -57,11 +58,51 @@ export default function CallIntakeModal({
   const [selectedMood, setSelectedMood] = useState<number>(3);
   const [selectedReason, setSelectedReason] = useState<IntakeReason>('FAMILIAR');
   const [notes, setNotes] = useState<string>('');
+  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
+
+  // Micro-interaction: Animated scale for selected mood button
+  const scaleAnims = useRef<{ [key: number]: Animated.Value }>({
+    1: new Animated.Value(1),
+    2: new Animated.Value(1),
+    3: new Animated.Value(1.06),
+    4: new Animated.Value(1),
+    5: new Animated.Value(1),
+  }).current;
 
   const isVideo = sessionType === 'VIDEO';
   const isTablet = width > 500;
 
   const currentMoodObj = MOOD_OPTIONS.find((m) => m.score === selectedMood) || MOOD_OPTIONS[2];
+
+  const handleSelectMood = (score: number) => {
+    setSelectedMood(score);
+    // Micro-interaction bounce
+    if (scaleAnims[score]) {
+      Animated.sequence([
+        Animated.timing(scaleAnims[score], {
+          toValue: 1.15,
+          duration: 90,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnims[score], {
+          toValue: 1.06,
+          friction: 4,
+          tension: 60,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    // Reset others
+    MOOD_OPTIONS.forEach((m) => {
+      if (m.score !== score && scaleAnims[m.score]) {
+        Animated.timing(scaleAnims[m.score], {
+          toValue: 1,
+          duration: 80,
+          useNativeDriver: true,
+        }).start();
+      }
+    });
+  };
 
   const handleConfirmWithIntake = () => {
     onSubmit({
@@ -72,7 +113,6 @@ export default function CallIntakeModal({
   };
 
   const handleSkipIntake = () => {
-    // Sube la llamada sin contestar la encuesta (modo directo)
     onSubmit(undefined);
   };
 
@@ -88,15 +128,15 @@ export default function CallIntakeModal({
             <View style={styles.headerLeft}>
               <View style={[styles.typeBadge, isVideo ? styles.typeBadgeVideo : styles.typeBadgeChat]}>
                 {isVideo ? (
-                  <Video size={14} color="#10B981" />
+                  <Video size={13} color="#059669" strokeWidth={2.2} />
                 ) : (
-                  <MessageSquare size={14} color="#38BDF8" />
+                  <MessageSquare size={13} color="#0284C7" strokeWidth={2.2} />
                 )}
                 <Text style={[styles.typeBadgeText, isVideo ? styles.typeTextVideo : styles.typeTextChat]}>
-                  {isVideo ? 'Videollamada Pastoral' : 'Chat Confidencial'}
+                  {isVideo ? 'Videollamada de Guardia' : 'Canal Escrito Confidencial'}
                 </Text>
               </View>
-              <Text style={styles.modalTitle}>Ficha de Triage Inicial</Text>
+              <Text style={styles.modalTitle}>Orientación Pastoral Previa</Text>
             </View>
             <TouchableOpacity
               style={styles.closeBtn}
@@ -104,12 +144,12 @@ export default function CallIntakeModal({
               disabled={isSubmitting}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <X size={20} color="#94A3B8" />
+              <X size={18} color="#64748B" />
             </TouchableOpacity>
           </View>
 
           <Text style={styles.modalSub}>
-            Completar esta breve orientación ayuda al capellán a prepararse para tu atención.
+            Esta breve guía le permite al capellán comprender tu necesidad y preparar una atención humana y precisa.
           </Text>
 
           <ScrollView
@@ -120,38 +160,50 @@ export default function CallIntakeModal({
             {/* 1. Mood Score: 1 to 5 */}
             <View style={styles.sectionBlock}>
               <View style={styles.sectionLabelRow}>
-                <Text style={styles.sectionLabel}>¿CÓMO TE SENTÍS EN ESTE MOMENTO?</Text>
+                <Text style={styles.sectionLabel}>¿CÓMO ESTÁ TU ÁNIMO EN ESTA GUARDIA?</Text>
                 <Text style={[styles.moodActiveTag, { color: currentMoodObj.color }]}>
-                  {currentMoodObj.score} · {currentMoodObj.label}
+                  {currentMoodObj.score}/5 · {currentMoodObj.label}
                 </Text>
               </View>
 
-              {/* Number buttons 1-5 */}
+              {/* Number buttons 1-5 with Micro-interactions */}
               <View style={styles.moodNumbersRow}>
                 {MOOD_OPTIONS.map((item) => {
                   const isSelected = item.score === selectedMood;
+                  const animScale = scaleAnims[item.score] || 1;
+
                   return (
-                    <TouchableOpacity
+                    <Animated.View
                       key={item.score}
                       style={[
-                        styles.moodNumberBtn,
-                        isSelected && {
-                          borderColor: item.color,
-                          backgroundColor: `${item.color}22`,
-                        },
+                        styles.moodNumberWrapper,
+                        { transform: [{ scale: animScale }] },
                       ]}
-                      onPress={() => setSelectedMood(item.score)}
-                      activeOpacity={0.7}
                     >
-                      <Text
+                      <TouchableOpacity
                         style={[
-                          styles.moodNumberText,
-                          isSelected && { color: item.color, fontWeight: '800' },
+                          styles.moodNumberBtn,
+                          isSelected
+                            ? {
+                                borderColor: item.color,
+                                backgroundColor: item.bg,
+                                borderWidth: 2,
+                              }
+                            : styles.moodNumberBtnDefault,
                         ]}
+                        onPress={() => handleSelectMood(item.score)}
+                        activeOpacity={0.8}
                       >
-                        {item.score}
-                      </Text>
-                    </TouchableOpacity>
+                        <Text
+                          style={[
+                            styles.moodNumberText,
+                            isSelected && { color: item.color, fontWeight: '800' },
+                          ]}
+                        >
+                          {item.score}
+                        </Text>
+                      </TouchableOpacity>
+                    </Animated.View>
                   );
                 })}
               </View>
@@ -160,19 +212,22 @@ export default function CallIntakeModal({
               <View
                 style={[
                   styles.moodLegendPill,
-                  { borderColor: `${currentMoodObj.color}40`, backgroundColor: `${currentMoodObj.color}14` },
+                  { borderColor: `${currentMoodObj.color}35`, backgroundColor: currentMoodObj.bg },
                 ]}
               >
                 <View style={[styles.moodDot, { backgroundColor: currentMoodObj.color }]} />
-                <Text style={[styles.moodLegendText, { color: currentMoodObj.color }]}>
-                  Nivel {currentMoodObj.score}: {currentMoodObj.label}
-                </Text>
+                <View style={styles.moodLegendTexts}>
+                  <Text style={[styles.moodLegendTitle, { color: currentMoodObj.color }]}>
+                    Nivel {currentMoodObj.score}: {currentMoodObj.label}
+                  </Text>
+                  <Text style={styles.moodLegendSub}>{currentMoodObj.sub}</Text>
+                </View>
               </View>
             </View>
 
             {/* 2. Reason of Consultation */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>MOTIVO PRINCIPAL DE CONSULTA</Text>
+              <Text style={styles.sectionLabel}>MOTIVO O ÁREA DE ACOMPAÑAMIENTO</Text>
               <View style={styles.reasonsGrid}>
                 {REASON_OPTIONS.map((item) => {
                   const isSelected = item.key === selectedReason;
@@ -184,8 +239,11 @@ export default function CallIntakeModal({
                         isSelected && styles.reasonChipSelected,
                       ]}
                       onPress={() => setSelectedReason(item.key)}
-                      activeOpacity={0.7}
+                      activeOpacity={0.75}
                     >
+                      {isSelected && (
+                        <Check size={12} color="#0F1E36" strokeWidth={2.8} style={{ marginRight: 4 }} />
+                      )}
                       <Text
                         style={[
                           styles.reasonChipText,
@@ -202,44 +260,49 @@ export default function CallIntakeModal({
 
             {/* 3. Notes (Optional) */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionLabel}>DETALLE O MENSAJE PREVIO (OPCIONAL)</Text>
+              <Text style={styles.sectionLabel}>BREVE MENSAJE O CONTEXTO (OPCIONAL)</Text>
               <TextInput
-                style={styles.notesInput}
-                placeholder="Ej. Necesito hablar urgente, situación difícil..."
-                placeholderTextColor="#64748B"
+                style={[
+                  styles.notesInput,
+                  isInputFocused && styles.notesInputFocused,
+                ]}
+                placeholder="Podés dejar una nota breve o inquietud específica..."
+                placeholderTextColor="#94A3B8"
                 value={notes}
                 onChangeText={setNotes}
                 maxLength={240}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
               />
             </View>
 
-            {/* Confidentiality Reminder */}
+            {/* Confidentiality Reminder Badge */}
             <View style={styles.secrecyCard}>
-              <ShieldCheck size={14} color="#10B981" />
+              <ShieldCheck size={16} color="#059669" strokeWidth={2.2} />
               <Text style={styles.secrecyText}>
-                Esta información solo la ve el capellán asignado bajo Secreto Ministerial.
+                Información protegida bajo Secreto Ministerial y Ética Pastoral Militar/Policial.
               </Text>
             </View>
           </ScrollView>
 
-          {/* Actions */}
+          {/* Footer Actions with Rounded Buttons */}
           <View style={styles.footerActions}>
             <TouchableOpacity
               style={[
                 styles.submitBtn,
-                isVideo ? styles.submitBtnVideo : styles.submitBtnChat,
+                isVideo ? styles.submitBtnVideo : styles.submitBtnNavy,
                 isSubmitting && { opacity: 0.7 },
               ]}
               onPress={handleConfirmWithIntake}
               disabled={isSubmitting}
-              activeOpacity={0.85}
+              activeOpacity={0.88}
             >
-              <HeartHandshake size={18} color="#FFFFFF" />
+              <HeartHandshake size={18} color="#FFFFFF" strokeWidth={2.2} />
               <Text style={styles.submitBtnText}>
-                {isSubmitting ? 'Conectando...' : 'Solicitar Asistencia'}
+                {isSubmitting ? 'Conectando con guardia...' : 'Solicitar Asistencia Pastoral'}
               </Text>
             </TouchableOpacity>
 
@@ -248,8 +311,9 @@ export default function CallIntakeModal({
               onPress={handleSkipIntake}
               disabled={isSubmitting}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.skipBtnText}>No contestar y llamar directo</Text>
+              <Text style={styles.skipBtnText}>Omitir cuestionario y conectar directo</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -261,21 +325,21 @@ export default function CallIntakeModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(10, 15, 24, 0.85)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
   modalCard: {
     width: '100%',
-    maxHeight: '90%',
-    backgroundColor: '#0F172A',
-    borderRadius: Theme.roundness.xl,
+    maxHeight: '92%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
     padding: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    ...globalStyles.shadowMd,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...globalStyles.shadowLg,
   },
   tabletCard: {
     maxWidth: 480,
@@ -284,7 +348,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   headerLeft: {
     flex: 1,
@@ -295,44 +359,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
   },
   typeBadgeVideo: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: '#ECFDF5',
   },
   typeBadgeChat: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    backgroundColor: '#F0F9FF',
   },
   typeBadgeText: {
     ...globalStyles.labelCaps,
-    fontSize: 10,
+    fontSize: 9.5,
     letterSpacing: 0.5,
+    fontFamily: Theme.fonts.headlineBold,
   },
   typeTextVideo: {
-    color: '#6EE7B7',
+    color: '#059669',
   },
   typeTextChat: {
-    color: '#7DD3FC',
+    color: '#0284C7',
   },
   modalTitle: {
-    fontFamily: Theme.fonts.headline,
-    fontSize: 19,
-    color: '#FFFFFF',
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 18,
+    color: '#0F172A',
     marginTop: 2,
   },
   closeBtn: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalSub: {
     ...globalStyles.bodySm,
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 12,
+    lineHeight: 17,
     marginBottom: 14,
   },
   formScroll: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionBlock: {
     marginBottom: 16,
@@ -346,8 +417,9 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...globalStyles.labelCaps,
     fontSize: 10,
-    color: '#CBD5E1',
+    color: '#475569',
     letterSpacing: 0.5,
+    fontFamily: Theme.fonts.headlineBold,
   },
   moodActiveTag: {
     fontFamily: Theme.fonts.bodySemiBold,
@@ -359,115 +431,137 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 10,
   },
-  moodNumberBtn: {
+  moodNumberWrapper: {
     flex: 1,
+    maxWidth: 58,
+  },
+  moodNumberBtn: {
     aspectRatio: 1,
-    maxWidth: 56,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  moodNumberBtnDefault: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
   moodNumberText: {
     fontSize: 18,
-    fontFamily: Theme.fonts.bodySemiBold,
-    color: '#E2E8F0',
+    fontFamily: Theme.fonts.headlineBold,
+    color: '#334155',
   },
   moodLegendPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 8,
+    gap: 10,
   },
   moodDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
-  moodLegendText: {
-    fontFamily: Theme.fonts.bodySemiBold,
+  moodLegendTexts: {
+    flex: 1,
+  },
+  moodLegendTitle: {
+    fontFamily: Theme.fonts.headlineBold,
     fontSize: 12,
+  },
+  moodLegendSub: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
   },
   reasonsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 6,
+    marginTop: 4,
   },
   reasonChip: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: Theme.roundness.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#E2E8F0',
   },
   reasonChipSelected: {
-    backgroundColor: 'rgba(217, 119, 6, 0.2)',
-    borderColor: '#F59E0B',
+    backgroundColor: '#FEF3C7',
+    borderColor: '#D97706',
   },
   reasonChipText: {
-    ...globalStyles.bodySm,
+    fontFamily: Theme.fonts.body,
     fontSize: 12,
-    color: '#CBD5E1',
+    color: '#475569',
   },
   reasonChipTextSelected: {
-    color: '#FDE68A',
-    fontWeight: '700',
+    fontFamily: Theme.fonts.bodySemiBold,
+    color: '#92400E',
   },
   notesInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: Theme.roundness.md,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: '#E2E8F0',
     padding: 12,
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontFamily: Theme.fonts.body,
     fontSize: 13,
-    minHeight: 72,
-    marginTop: 6,
+    minHeight: 74,
+    marginTop: 4,
+  },
+  notesInputFocused: {
+    borderColor: Theme.colors.tacticalNavy,
+    backgroundColor: '#FFFFFF',
   },
   secrecyCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    backgroundColor: '#F0FDF4',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-    marginTop: 4,
+    borderColor: '#BBF7D0',
+    marginTop: 2,
+    marginBottom: 4,
   },
   secrecyText: {
     flex: 1,
+    fontFamily: Theme.fonts.body,
     fontSize: 11,
-    color: '#6EE7B7',
+    color: '#166534',
     lineHeight: 15,
   },
   footerActions: {
     gap: 8,
-    marginTop: 4,
+    marginTop: 6,
   },
   submitBtn: {
-    minHeight: 46,
-    borderRadius: Theme.roundness.md,
+    height: 50,
+    borderRadius: 25,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingHorizontal: 16,
+    ...globalStyles.shadowSm,
+  },
+  submitBtnNavy: {
+    backgroundColor: Theme.colors.tacticalNavy,
   },
   submitBtnVideo: {
     backgroundColor: '#059669',
-  },
-  submitBtnChat: {
-    backgroundColor: '#0284C7',
   },
   submitBtnText: {
     fontFamily: Theme.fonts.bodySemiBold,
@@ -475,14 +569,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   skipBtn: {
-    minHeight: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
   skipBtnText: {
-    ...globalStyles.bodySm,
+    fontFamily: Theme.fonts.body,
     fontSize: 12,
-    color: '#94A3B8',
+    color: '#64748B',
     textDecorationLine: 'underline',
   },
 });

@@ -25,6 +25,8 @@ import { getChaplainTeam, getMyBasicProfile, updateMyBasicProfile } from '../lib
 import type { Perlita } from '../types/bible';
 import type { Session, SessionType, CallIntake, ChaplainTeamMember } from '../types/api';
 import CallIntakeModal from '../components/duty/CallIntakeModal';
+import NoChaplainAvailableModal from '../components/duty/NoChaplainAvailableModal';
+import { getDeterministicForcePerlita, getRandomForcePerlita } from '../data/perlitasData';
 import {
   TacticalCard,
   TacticalButton,
@@ -58,6 +60,9 @@ interface BasicDashboardProps {
   onNavigateToPrayers?: () => void;
   onNavigateToBlogs?: () => void;
 }
+
+const DEFAULT_FORCE_PORTRAIT =
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuDhgKUhM5FIC82K02jlklaDgenTWM2lcfpTpcZNQ8Nrq42tc4cWzkV3gj_W1L8uyQLrCvmck9lmaCgLXgdSUuVEvGcrlq6wWC4PKxWzDskWn9x2DBpPtSmPe7WUVVkwdeM4dEA4d92ySFhcRYmsAjBq-fLehNdLZ1aN1CjkFN0fvKjJOPPwjDfxxpUlg_Phvll2Mf6LHoUmTfZC5Y5qbvgvlE48uV4cQt3KjwzsUgfAYkZAbvhNh3iIbg';
 
 const CHAPLAIN_ROSTER = [
   {
@@ -113,10 +118,11 @@ export default function BasicDashboard({
     setIsLoadingPerlita(true);
     getPerlitaDelDia()
       .then((data) => {
-        if (isMounted) setPerlita(data);
+        if (isMounted) setPerlita(data || getDeterministicForcePerlita());
       })
       .catch((err) => {
         console.warn('Error loading daily perlita in dashboard:', err);
+        if (isMounted) setPerlita(getDeterministicForcePerlita());
       })
       .finally(() => {
         if (isMounted) setIsLoadingPerlita(false);
@@ -160,13 +166,14 @@ export default function BasicDashboard({
   };
 
   const handleRandomPerlitaInDashboard = async () => {
-    setIsLoadingPerlita(true);
     try {
-      const data = await getRandomPerlita();
-      setPerlita(data);
+      setIsLoadingPerlita(true);
+      const random = await getRandomPerlita();
+      setPerlita(random || getRandomForcePerlita());
       setIsRandomPerlita(true);
-    } catch (err) {
-      // Fallback
+    } catch {
+      setPerlita(getRandomForcePerlita());
+      setIsRandomPerlita(true);
     } finally {
       setIsLoadingPerlita(false);
     }
@@ -189,6 +196,14 @@ export default function BasicDashboard({
   const requestCall = useCallStore((state) => state.requestCall);
   const resetCall = useCallStore((state) => state.resetCall);
   const endCall = useCallStore((state) => state.endCall);
+
+  const [showNoChaplainsModal, setShowNoChaplainsModal] = useState(false);
+
+  useEffect(() => {
+    if (error && (error.includes('No hay capellanes') || error.includes('disponibles'))) {
+      setShowNoChaplainsModal(true);
+    }
+  }, [error]);
 
   const handleCancelRequest = async () => {
     if (currentSession?.sessionId) {
@@ -424,7 +439,7 @@ export default function BasicDashboard({
           </View>
         </View>
 
-        {error && (
+        {error && !error.includes('No hay capellanes') && !error.includes('disponibles') && (
           <View style={styles.errorContainer}>
             <AlertTriangle size={16} color={Theme.colors.error} />
             <Text style={styles.errorText}>{error}</Text>
@@ -524,10 +539,19 @@ export default function BasicDashboard({
               item.bio ||
               item.specialty ||
               (item.militaryRank ? `Rango: ${item.militaryRank}` : 'Asistencia pastoral y contención');
-            const avatar =
-              item.avatarUrl ||
-              item.avatar ||
-              'https://lh3.googleusercontent.com/aida-public/AB6AXuBqDZ2JpvNoZkWZF0odAe80kpx0qGWzdevv88xrvcS6dpIguNmVQbkNPw2LjQpPdMsgsA0rItqZg37YqDbkoiXFTqTu5eIaE8YiaCmRx6xaodA-G3wkW4Uvik6qGtzF5M1R4X34VbuUhjYGrHIlh1tLp_zoffvUwN6UwMtQzrkIUySkwdS7qTr3mE0_c6nEIhQ9V-9laJcB-UM5JhyE0ikuJHNQ7tQWo_KSvEynMAfvI4NFfiV29rWPRA';
+            let avatar = item.avatarUrl || item.avatar;
+            if (!avatar) {
+              const lowerName = (name || '').toLowerCase();
+              if (lowerName.includes('morales')) {
+                avatar = CHAPLAIN_ROSTER[0].avatar;
+              } else if (lowerName.includes('álvarez') || lowerName.includes('alvarez')) {
+                avatar = CHAPLAIN_ROSTER[1].avatar;
+              } else if (lowerName.includes('vázquez') || lowerName.includes('vazquez')) {
+                avatar = CHAPLAIN_ROSTER[2].avatar;
+              } else {
+                avatar = DEFAULT_FORCE_PORTRAIT;
+              }
+            }
             const isOnline = item.status === 'ONLINE' || !item.status;
 
             return (
@@ -654,6 +678,20 @@ export default function BasicDashboard({
         onSubmit={async (intake?: CallIntake) => {
           setShowIntakeModal(false);
           await handleStartCall(selectedType, intake);
+        }}
+      />
+
+      {/* No Chaplains Available Support Modal */}
+      <NoChaplainAvailableModal
+        visible={showNoChaplainsModal}
+        onClose={() => {
+          setShowNoChaplainsModal(false);
+          resetCall();
+        }}
+        onRetry={() => {
+          setShowNoChaplainsModal(false);
+          resetCall();
+          handleStartCall(selectedType);
         }}
       />
     </>

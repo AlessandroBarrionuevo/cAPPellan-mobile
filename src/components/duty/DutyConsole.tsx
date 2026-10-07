@@ -24,6 +24,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import type { CallResponse, SessionType, AuthUser, PostCallReport } from '../../types/api';
+import ChaplainDutyCardBanner from './ChaplainDutyCardBanner';
 
 export interface DutyConsoleProps {
   user?: AuthUser | null;
@@ -41,6 +42,7 @@ export interface DutyConsoleProps {
     listeningHours?: string;
     avgResponseTime?: string;
   };
+  hideHeader?: boolean;
 }
 
 // Sample recent acts for the duty overview
@@ -83,6 +85,7 @@ export default function DutyConsole({
     listeningHours: '5.2h',
     avgResponseTime: '< 28s',
   },
+  hideHeader = false,
 }: DutyConsoleProps) {
   // Pulse animation for online indicator & incoming alert
   const [pulseAnim] = useState(new Animated.Value(1));
@@ -128,19 +131,21 @@ export default function DutyConsole({
   return (
     <View style={styles.container}>
       {/* 1. Header & Identity Card with Duty Switch */}
-      <View style={[styles.headerCard, globalStyles.shadowSoft]}>
-        <View style={styles.headerLeft}>
-          <View style={styles.emblemWrapper}>
-            <InstitutionalEmblem size={38} />
-          </View>
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>cAPPellaaan</Text>
-            <Text style={styles.headerSub} numberOfLines={1}>
-              {user ? `Cap. ${user.username}` : 'Cap. Morales'}
-            </Text>
+      {!hideHeader && (
+        <View style={[styles.headerCard, globalStyles.shadowSoft]}>
+          <View style={styles.headerLeft}>
+            <View style={styles.emblemWrapper}>
+              <InstitutionalEmblem size={38} />
+            </View>
+            <View style={styles.headerInfo}>
+              <Text style={styles.headerTitle}>cAPPellan</Text>
+              <Text style={styles.headerSub} numberOfLines={1}>
+                {user ? `Cap. ${user.username}` : 'Cap. Morales'}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* 2. Live Dispatch Radar Capsule */}
       {incomingCall ? (
@@ -222,6 +227,16 @@ export default function DutyConsole({
             </>
           )}
         </TouchableOpacity>
+      )}
+
+      {/* 2b. Chaplain Duty Card Banner (Visual inspired by photo - keeping existing intact) */}
+      {!incomingCall && (
+        <ChaplainDutyCardBanner
+          isOnline={isOnline}
+          isToggling={isToggling}
+          onToggle={onToggleOnline}
+          user={user}
+        />
       )}
       {/*
       {incomingCall ? (

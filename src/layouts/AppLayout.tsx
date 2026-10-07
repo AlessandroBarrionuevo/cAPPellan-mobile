@@ -44,9 +44,9 @@ export function AppLayout({
 
   const isChaplainRole = user.role === 'CHAPLAIN' || user.role === 'CHAPLAIN_LEADER';
 
-  // Map sub-tabs and role views to the active bottom nav item
+  // Map sub-tabs and role views to the active bottom nav item for each role
   const getNavTab = (): NavTab => {
-    if (user.role === 'CHAPLAIN_CONTENT_LEADER') {
+    if (user.role === 'CHAPLAIN' || user.role === 'CHAPLAIN_LEADER') {
       switch (activeTab) {
         case 'guardia':
           return 'guardia';
@@ -56,24 +56,28 @@ export function AppLayout({
           return 'informes';
         case 'perfil':
           return 'perfil';
-        case 'content':
+        case 'home':
         default:
-          return 'content';
+          return 'home';
       }
     }
 
-    if (isChaplainRole) {
+    if (user.role === 'CHAPLAIN_CONTENT_LEADER') {
       switch (activeTab) {
+        case 'content':
+        case 'blogs':
+          return 'content';
+        case 'guardia':
+          return 'guardia';
         case 'chat':
           return 'chat';
         case 'informes':
           return 'informes';
         case 'perfil':
           return 'perfil';
-        case 'guardia':
         case 'home':
         default:
-          return 'guardia';
+          return 'home';
       }
     }
 
@@ -91,7 +95,7 @@ export function AppLayout({
       }
     }
 
-    // Default for BASIC role
+    // BASIC
     switch (activeTab) {
       case 'biblia':
       case 'lectura':
@@ -137,8 +141,7 @@ export function AppLayout({
   };
 
   const isSubScreen =
-    (activeTab === 'content' || activeTab === 'oraciones' || activeTab === 'blogs') &&
-    user.role !== 'CHAPLAIN_CONTENT_LEADER';
+    activeTab === 'content' || activeTab === 'oraciones' || activeTab === 'blogs';
 
   // Determine if top header should display
   // Screens with dedicated top headers or hero banners do not need outer VigilHeader
@@ -152,10 +155,11 @@ export function AppLayout({
     activeTab !== 'lectura' &&
     activeTab !== 'biblia';
 
-  const hasTopHeroBanner = activeTab === 'home';
+  const noTopPadding = activeTab === 'home' || activeTab === 'chat';
+  const shouldRenderBottomNav = showBottomNav && activeTab !== 'chat';
 
   return (
-    <View style={[styles.container, { paddingTop: hasTopHeroBanner ? 0 : insets.top }]}>
+    <View style={[styles.container, { paddingTop: noTopPadding ? 0 : insets.top }]}>
       <StatusBar style="dark" />
 
       {/* Optional Top Header for secondary screens */}
@@ -165,11 +169,7 @@ export function AppLayout({
           subtitle="Servicio de Capellanía"
           sectionBadge={getSectionBadge()}
           showBack={isSubScreen}
-          onBack={
-            isSubScreen
-              ? () => onTabChange(isChaplainRole ? 'guardia' : 'mas')
-              : undefined
-          }
+          onBack={isSubScreen ? () => onTabChange('mas') : undefined}
         />
       )}
 
@@ -177,7 +177,7 @@ export function AppLayout({
       <View style={styles.mainContent}>{children}</View>
 
       {/* Modern Curved Bottom Navigation Bar (BottomNavBar preserved for fallback) */}
-      {showBottomNav && (
+      {shouldRenderBottomNav && (
         <CurvedBottomNavBar
           activeTab={getNavTab()}
           onTabChange={(tab) => onTabChange(tab as AppTab)}

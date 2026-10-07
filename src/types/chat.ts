@@ -1,4 +1,4 @@
-﻿export type ChatSenderRole = 'GUEST' | 'USER' | 'CHAPLAIN';
+export type ChatSenderRole = 'GUEST' | 'BASIC' | 'CHAPLAIN';
 
 export interface ChatMessage {
   id?: number;
@@ -18,4 +18,4 @@ export interface SendChatMessagePayload {
   clientToken?: string;
 }
 
-export type ChatConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+export type ChatConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';

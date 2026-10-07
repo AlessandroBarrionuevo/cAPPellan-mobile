@@ -4,6 +4,17 @@ import { SafeAppProvider } from './src/lib/safeArea';
 import { useFonts } from 'expo-font';
 import { IosevkaCharon_500Medium, IosevkaCharon_700Bold } from '@expo-google-fonts/iosevka-charon';
 import { Commissioner_400Regular, Commissioner_600SemiBold } from '@expo-google-fonts/commissioner';
+import { Alef_400Regular, Alef_700Bold } from '@expo-google-fonts/alef';
+import {
+  Zain_200ExtraLight,
+  Zain_300Light,
+  Zain_300Light_Italic,
+  Zain_400Regular,
+  Zain_400Regular_Italic,
+  Zain_700Bold,
+  Zain_800ExtraBold,
+  Zain_900Black,
+} from '@expo-google-fonts/zain';
 import { useAuthStore } from './src/lib/stores/auth';
 import { useCallStore } from './src/lib/stores/call';
 import { useChaplainStore } from './src/lib/stores/chaplain';
@@ -23,10 +34,14 @@ import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import BasicDashboard from './src/screens/BasicDashboard'; // Original intact
 import BasicDashboardPreview from './src/screens/BasicDashboardPreview';
 import ChaplainDashboard from './src/screens/ChaplainDashboard';
+import ChaplainContentDashboard from './src/screens/ChaplainContentDashboard';
 import LeaderDashboard from './src/screens/LeaderDashboard';
 import SuperuserDashboard from './src/screens/SuperuserDashboard';
 import CallRoomScreen from './src/screens/CallRoomScreen';
+import CallRoomScreenPreview from './src/screens/CallRoomScreenPreview'; // Previous UI intact for rollback
+import VideoCallPreview from './src/screens/VideoCallPreview';
 import ChatRoomScreen from './src/screens/ChatRoomScreen';
+import ChatPreview from './src/screens/ChatPreview';
 import PrayerWallScreen from './src/screens/PrayerWallScreen';
 import ContentScreen from './src/screens/ContentScreen';
 import LecturaScreen from './src/screens/LecturaScreen'; // Fallback intact
@@ -36,6 +51,7 @@ import HubScreen from './src/screens/HubScreen';
 import BlogFeedScreen from './src/screens/BlogFeedScreen';
 import ReportsLogbookView from './src/components/reports/ReportsLogbookView';
 import IncomingSessionModal from './src/components/duty/IncomingSessionModal';
+import IncomingSessionModalPreview from './src/components/duty/IncomingSessionModalPreview';
 import type { CallResponse, SessionType } from './src/types/api';
 
 export default function App() {
@@ -45,6 +61,12 @@ export default function App() {
   const [inChatView, setInChatView] = useState(false);
   const [lastEndedSessionId, setLastEndedSessionId] = useState<number | null>(null);
   const [showIncomingModal, setShowIncomingModal] = useState(false);
+  const [prayerWallTab, setPrayerWallTab] = useState<'prayer' | 'gratitude'>('prayer');
+
+  const handleNavigateToPrayers = (tab?: 'prayer' | 'gratitude') => {
+    if (tab) setPrayerWallTab(tab);
+    setActiveTab('oraciones');
+  };
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
@@ -60,6 +82,19 @@ export default function App() {
   const currentSession = useCallStore((state) => state.currentSession);
 
   const [fontsLoaded] = useFonts({
+    // Primary (Alef)
+    Alef_400Regular,
+    Alef_700Bold,
+    // Secondary (Zain)
+    Zain_200ExtraLight,
+    Zain_300Light,
+    Zain_300Light_Italic,
+    Zain_400Regular,
+    Zain_400Regular_Italic,
+    Zain_700Bold,
+    Zain_800ExtraBold,
+    Zain_900Black,
+    // Legacy fonts preloaded for instant rollback
     IosevkaCharon_500Medium,
     IosevkaCharon_700Bold,
     Commissioner_400Regular,
@@ -70,19 +105,6 @@ export default function App() {
     checkSession();
     requestNotificationPermissionAndScheduleReminder();
   }, [checkSession]);
-
-  // Ensure chaplain roles land directly on the appropriate initial tab
-  useEffect(() => {
-    if (user?.role === 'CHAPLAIN_CONTENT_LEADER') {
-      if (activeTab === 'home') {
-        setActiveTab('content');
-      }
-    } else if (user?.role === 'CHAPLAIN' || user?.role === 'CHAPLAIN_LEADER') {
-      if (activeTab === 'home') {
-        setActiveTab('guardia');
-      }
-    }
-  }, [user?.role]);
 
   // Global Real-Time SSE Push with Polling Fallback for assigned calls when chaplain is ONLINE
   useEffect(() => {
@@ -181,10 +203,10 @@ export default function App() {
       );
     }
 
-    // 2. Active in Fullscreen Call Room
+    // 2. Active in Fullscreen Video Call Room (Switch to CallRoomScreenPreview for instant rollback)
     if (inCallView) {
       return (
-        <CallRoomScreen
+        <VideoCallPreview
           onCallEnded={() => {
             const currentSes = useCallStore.getState().currentSession;
             const assigned = useChaplainStore.getState().assignedCall;
@@ -203,6 +225,7 @@ export default function App() {
               setActiveTab('informes');
             }
           }}
+          onOpenChat={() => setInChatView(true)}
         />
       );
     }
@@ -210,7 +233,8 @@ export default function App() {
     // 3. Active in Fullscreen Chat Room (if opened modally)
     if (inChatView) {
       return (
-        <ChatRoomScreen
+        <ChatPreview
+          onBack={() => setInChatView(false)}
           onChatEnded={() => {
             const currentSes = useCallStore.getState().currentSession;
             const assigned = useChaplainStore.getState().assignedCall;
@@ -218,6 +242,7 @@ export default function App() {
 
             setInChatView(false);
             useChaplainStore.getState().clearAssignedCall();
+            useCallStore.getState().resetCall();
 
             if (
               sessionId &&
@@ -253,7 +278,16 @@ export default function App() {
     const renderDashboardByRole = () => {
       switch (user.role) {
         case 'CHAPLAIN_CONTENT_LEADER':
-          return <ContentScreen />;
+          return (
+            <ChaplainContentDashboard
+              onNavigateToContent={() => setActiveTab('content')}
+              onNavigateToBlogs={() => setActiveTab('blogs')}
+              onNavigateToBible={() => setActiveTab('lectura')}
+              onNavigateToPrayers={handleNavigateToPrayers}
+              onJoinCall={() => setInCallView(true)}
+              onJoinChat={() => setActiveTab('chat')}
+            />
+          );
         case 'CHAPLAIN':
           return (
             <ChaplainDashboard
@@ -262,18 +296,24 @@ export default function App() {
               lastEndedSessionId={lastEndedSessionId}
               onClearEndedSession={() => setLastEndedSessionId(null)}
               onNavigateToInformes={() => setActiveTab('informes')}
-              onNavigatePrayerWall={() => setActiveTab('oraciones')}
+              onNavigatePrayerWall={handleNavigateToPrayers}
+              onNavigateToBible={() => setActiveTab('lectura')}
+              onNavigateToContent={() => setActiveTab('content')}
+              onNavigateToBlogs={() => setActiveTab('blogs')}
             />
           );
         case 'CHAPLAIN_LEADER':
           return (
             <LeaderDashboard
               onJoinCall={() => setInCallView(true)}
-              onJoinChat={() => setActiveTab('chat')}
+              onJoinChat={() => setInChatView(true)}
               lastEndedSessionId={lastEndedSessionId}
               onClearEndedSession={() => setLastEndedSessionId(null)}
               onNavigateToInformes={() => setActiveTab('informes')}
-              onNavigatePrayerWall={() => setActiveTab('oraciones')}
+              onNavigatePrayerWall={handleNavigateToPrayers}
+              onNavigateToBible={() => setActiveTab('lectura')}
+              onNavigateToContent={() => setActiveTab('content')}
+              onNavigateToBlogs={() => setActiveTab('blogs')}
             />
           );
         case 'SUPERUSER':
@@ -283,10 +323,10 @@ export default function App() {
           return (
             <BasicDashboardPreview
               onJoinCall={() => setInCallView(true)}
-              onJoinChat={() => setActiveTab('chat')}
+              onJoinChat={() => setInChatView(true)}
               onNavigateToBible={() => setActiveTab('lectura')}
               onNavigateToContent={() => setActiveTab('content')}
-              onNavigateToPrayers={() => setActiveTab('oraciones')}
+              onNavigateToPrayers={handleNavigateToPrayers}
               onNavigateToBlogs={() => setActiveTab('blogs')}
             />
           );
@@ -299,19 +339,22 @@ export default function App() {
           return (
             <ChaplainDashboard
               onJoinCall={() => setInCallView(true)}
-              onJoinChat={() => setActiveTab('chat')}
+              onJoinChat={() => setInChatView(true)}
               lastEndedSessionId={lastEndedSessionId}
               onClearEndedSession={() => setLastEndedSessionId(null)}
               onNavigateToInformes={() => setActiveTab('informes')}
               onNavigatePrayerWall={() => setActiveTab('oraciones')}
+              onNavigateToBible={() => setActiveTab('lectura')}
+              onNavigateToContent={() => setActiveTab('content')}
+              onNavigateToBlogs={() => setActiveTab('blogs')}
             />
           );
         case 'home':
           return renderDashboardByRole();
         case 'chat':
           return (
-            <ChatRoomScreen
-              onChatEnded={() => {
+            <ChatPreview
+              onBack={() => {
                 clearAssignedCall();
                 useCallStore.getState().resetCall();
                 setActiveTab(
@@ -322,9 +365,16 @@ export default function App() {
                     : 'home'
                 );
               }}
-              onRequestReport={(sessionId) => {
-                setLastEndedSessionId(sessionId);
-                setActiveTab('informes');
+              onChatEnded={() => {
+                clearAssignedCall();
+                useCallStore.getState().resetCall();
+                setActiveTab(
+                  user.role === 'CHAPLAIN_CONTENT_LEADER'
+                    ? 'content'
+                    : isChaplainStaff
+                    ? 'guardia'
+                    : 'home'
+                );
               }}
             />
           );
@@ -343,7 +393,7 @@ export default function App() {
         case 'lectura':
           return <BibleReaderPreview onBack={() => setActiveTab('home')} />;
         case 'oraciones':
-          return <PrayerWallScreen />;
+          return <PrayerWallScreen initialTab={prayerWallTab} />;
         case 'perfil':
           return <ProfileScreen />;
         case 'mas':
@@ -351,9 +401,11 @@ export default function App() {
             <HubScreen
               onNavigateToBible={() => setActiveTab('lectura')}
               onNavigateToContent={() => setActiveTab('content')}
-              onNavigateToPrayers={() => setActiveTab('oraciones')}
+              onNavigateToPrayers={handleNavigateToPrayers}
               onNavigateToBlogs={() => setActiveTab('blogs')}
               onContactChaplain={() => setActiveTab(isChaplainStaff ? 'guardia' : 'home')}
+              onNavigateToGuardia={() => setActiveTab('guardia')}
+              onNavigateToInformes={() => setActiveTab('informes')}
             />
           );
         default:
@@ -373,12 +425,23 @@ export default function App() {
           {renderContent()}
         </AppLayout>
 
-        {/* Global Incoming Session Alert Modal (Pop-up) for Chaplains */}
-        <IncomingSessionModal
+        {/* Global Incoming Session Alert Modal (Pop-up) for Chaplains Preview */}
+        <IncomingSessionModalPreview
           visible={showIncomingModal && Boolean(assignedCall)}
           session={assignedCall}
-          onAccept={(sessionType: SessionType) => {
+          onAccept={async (sessionType: SessionType) => {
             setShowIncomingModal(false);
+            try {
+              // Crucial: triggers pollAssignedCall in Spring Boot to switch status from WAITING to IN_PROGRESS
+              const refreshed = await request<CallResponse>(ENDPOINTS.CALLS_ASSIGNED);
+              if (refreshed) {
+                setAssignedCall(refreshed);
+                useCallStore.getState().setSession(refreshed);
+              }
+            } catch (err) {
+              console.warn('[App] Error claiming assigned call on backend:', err);
+            }
+
             if (sessionType === 'CHAT') {
               setActiveTab('chat');
             } else {

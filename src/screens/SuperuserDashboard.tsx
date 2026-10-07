@@ -13,6 +13,8 @@ import {
 import { Theme, globalStyles } from '../theme/Theme';
 import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
+import { DashboardHeader } from '../components/dashboard';
+import { useAuthStore } from '../lib/stores/auth';
 import type { AuthUser, AppRole } from '../types/api';
 import {
   UserPlus,
@@ -24,6 +26,7 @@ import {
 } from 'lucide-react-native';
 
 export default function SuperuserDashboard() {
+  const user = useAuthStore((state) => state.user);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -80,11 +83,19 @@ export default function SuperuserDashboard() {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
+      {/* Top Header Bar: App Logo + Name/Email */}
+      <DashboardHeader
+        user={user}
+        greeting="Comando General"
+        roleBadge="SUPERUSER"
+      />
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Header */}
       <View style={[styles.headerCard, globalStyles.shadowSoft]}>
         <View style={styles.headerInfo}>
@@ -239,6 +250,7 @@ export default function SuperuserDashboard() {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 }
 

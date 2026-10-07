@@ -523,7 +523,8 @@ export default function ReservedProfileView({
 
       {/* 3. Confidentiality Legal & Pastoral Guarantee */}
       <TacticalCard style={styles.guaranteeCard} variant="low" padding={16}>
-        <View style={styles.guaranteeHeader}>          <View style={styles.guaranteeTextCol}>
+        <View style={styles.guaranteeHeader}>
+          <View style={styles.guaranteeTextCol}>
             <Text style={styles.guaranteeTitle}>Garantía Canónica e Institucional</Text>
             <Text style={styles.guaranteeDesc}>
               Secreto de Confesión y Reserva Pastoral Garantizada por Estatuto Institucional. Ningún dato ni videollamada es registrado en servidores de mando.

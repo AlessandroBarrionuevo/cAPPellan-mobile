@@ -64,66 +64,58 @@ export function CurvedBottomNavBar({
       }),
     ]).start();
 
-    if (userRole === 'CHAPLAIN' || userRole === 'CHAPLAIN_LEADER') {
-      onTabChange('guardia');
-    } else if (userRole === 'CHAPLAIN_CONTENT_LEADER') {
-      onTabChange('content');
-    } else {
-      onTabChange('home');
-    }
+    onTabChange('home');
   };
 
   const isContentLeader = userRole === 'CHAPLAIN_CONTENT_LEADER';
   const isChaplainRole = userRole === 'CHAPLAIN' || userRole === 'CHAPLAIN_LEADER';
   const isSuperuser = userRole === 'SUPERUSER';
 
-  // 2 items on Left, 2 items on Right
-  const { leftTabs, rightTabs } = isContentLeader
-    ? {
-        leftTabs: [
-          { key: 'content' as NavTab, label: 'Contenido', icon: Tv },
-          { key: 'guardia' as NavTab, label: 'Guardia', icon: Shield },
-        ],
-        rightTabs: [
-          { key: 'chat' as NavTab, label: 'Chat', icon: MessageSquare },
-          { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
-        ],
-      }
-    : isChaplainRole
-    ? {
-        leftTabs: [
-          { key: 'guardia' as NavTab, label: 'Guardia', icon: Shield },
-          { key: 'chat' as NavTab, label: 'Chat Directo', icon: MessageSquare },
-        ],
-        rightTabs: [
-          { key: 'informes' as NavTab, label: 'Informes', icon: FileText },
-          { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
-        ],
-      }
-    : isSuperuser
-    ? {
-        leftTabs: [
-          { key: 'home' as NavTab, label: 'Comando', icon: Shield },
-          { key: 'chat' as NavTab, label: 'Chat', icon: MessageSquare },
-        ],
-        rightTabs: [
-          { key: 'informes' as NavTab, label: 'Informes', icon: FileText },
-          { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
-        ],
-      }
-    : {
-        leftTabs: [
-          { key: 'home' as NavTab, label: 'Inicio', icon: Home },
-          { key: 'biblia' as NavTab, label: 'Biblia', icon: BookOpen },
-        ],
-        rightTabs: [
-          { key: 'mas' as NavTab, label: 'Comunidad', icon: LayoutGrid },
-          { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
-        ],
-      };
+  // 2 items on Left, 2 items on Right (Role-specific tabs aligned with previous navbar)
+  let leftTabs: { key: NavTab; label: string; icon: any }[];
+  let rightTabs: { key: NavTab; label: string; icon: any }[];
+
+  if (isContentLeader) {
+    leftTabs = [
+      { key: 'content' as NavTab, label: 'Contenido', icon: Tv },
+      { key: 'guardia' as NavTab, label: 'Guardia', icon: Shield },
+    ];
+    rightTabs = [
+      { key: 'chat' as NavTab, label: 'Chat', icon: MessageSquare },
+      { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
+    ];
+  } else if (isChaplainRole) {
+    leftTabs = [
+      { key: 'guardia' as NavTab, label: 'Guardia', icon: Shield },
+      { key: 'chat' as NavTab, label: 'Chat Directo', icon: MessageSquare },
+    ];
+    rightTabs = [
+      { key: 'informes' as NavTab, label: 'Informes', icon: FileText },
+      { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
+    ];
+  } else if (isSuperuser) {
+    leftTabs = [
+      { key: 'home' as NavTab, label: 'Comando', icon: Shield },
+      { key: 'chat' as NavTab, label: 'Chat', icon: MessageSquare },
+    ];
+    rightTabs = [
+      { key: 'informes' as NavTab, label: 'Informes', icon: FileText },
+      { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
+    ];
+  } else {
+    // BASIC
+    leftTabs = [
+      { key: 'home' as NavTab, label: 'Inicio', icon: Home },
+      { key: 'biblia' as NavTab, label: 'Biblia', icon: BookOpen },
+    ];
+    rightTabs = [
+      { key: 'mas' as NavTab, label: 'Comunidad', icon: LayoutGrid },
+      { key: 'perfil' as NavTab, label: 'Perfil', icon: User },
+    ];
+  }
 
   // Dimensions for Curved Cradle Notch
-  const bottomInset = Math.max(insets.bottom, 12);
+  const bottomInset = Math.max(50, 12);//cambie a 50 perro estaba con una propiedad insets.bottom
   const barHeight = 64 + bottomInset;
   const centerX = width / 2;
   const cornerRadius = 28; // Curved sides
@@ -218,6 +210,7 @@ export function CurvedBottomNavBar({
           <Animated.View
             style={[
               styles.floatingCircle,
+              activeTab === 'home' && styles.floatingCircleActive,
               { transform: [{ scale: scaleAnim }] },
             ]}
           >
@@ -252,7 +245,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'transparent',
-    marginBottom:0,
+    zIndex: 99,
     ...Platform.select({
       ios: {
         shadowColor: '#0F172A',
@@ -268,7 +261,7 @@ const styles = StyleSheet.create({
   floatingCenterWrapper: {
     position: 'absolute',
     top: -24,
-    zIndex: 50,
+    zIndex: 100,
   },
   floatingCircle: {
     width: 60,
@@ -290,6 +283,10 @@ const styles = StyleSheet.create({
         elevation: 10,
       },
     }),
+  },
+  floatingCircleActive: {
+    borderColor: '#0c7ae0',
+    borderWidth: 3,
   },
   logoImage: {
     width: '100%',

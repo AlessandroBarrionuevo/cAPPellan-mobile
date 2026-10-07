@@ -17,7 +17,8 @@ import { request, setClientToken } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAppInsets } from '../lib/safeArea';
 import DutyConsole from '../components/duty/DutyConsole';
-import NewReportModal from '../components/reports/NewReportModal';
+import { NewReportModalPreview } from '../components/reports/NewReportModalPreview';
+import { SharedDashboardWidgets, DashboardHeader } from '../components/dashboard';
 import {
   Users,
   UserCheck,
@@ -33,7 +34,10 @@ export interface LeaderDashboardProps {
   lastEndedSessionId: number | null;
   onClearEndedSession: () => void;
   onNavigateToInformes?: () => void;
-  onNavigatePrayerWall?: () => void;
+  onNavigatePrayerWall?: (initialTab?: 'prayer' | 'gratitude') => void;
+  onNavigateToBible?: () => void;
+  onNavigateToContent?: () => void;
+  onNavigateToBlogs?: () => void;
 }
 
 export default function LeaderDashboard({
@@ -43,6 +47,9 @@ export default function LeaderDashboard({
   onClearEndedSession,
   onNavigateToInformes,
   onNavigatePrayerWall,
+  onNavigateToBible,
+  onNavigateToContent,
+  onNavigateToBlogs,
 }: LeaderDashboardProps) {
   const { width } = useWindowDimensions();
   const insets = useAppInsets();
@@ -100,7 +107,17 @@ export default function LeaderDashboard({
     }
   };
 
-  const handleAcceptCall = (sessionType: SessionType) => {
+  const handleAcceptCall = async (sessionType: SessionType) => {
+    try {
+      const refreshed = await request<CallResponse>(ENDPOINTS.CALLS_ASSIGNED);
+      if (refreshed) {
+        setAssignedCall(refreshed);
+        useCallStore.getState().setSession(refreshed);
+      }
+    } catch (err) {
+      console.warn('[LeaderDashboard] Error claiming assigned call:', err);
+    }
+
     if (sessionType === 'CHAT') {
       onJoinChat();
     } else {
@@ -112,6 +129,13 @@ export default function LeaderDashboard({
 
   return (
     <View style={styles.container}>
+      {/* Top Header Bar: App Logo + Name/Email */}
+      <DashboardHeader
+        user={user}
+        greeting="Comando Pastoral"
+        roleBadge="LÍDER"
+      />
+
       {/* Top Segmented Tab Switch */}
       <View style={styles.tabBarWrapper}>
         <View style={styles.tabBar}>
@@ -162,6 +186,7 @@ export default function LeaderDashboard({
         >
           <DutyConsole
             user={user}
+            hideHeader={true}
             isOnline={status === 'ONLINE'}
             isToggling={isToggling}
             onToggleOnline={handleToggle}
@@ -181,7 +206,20 @@ export default function LeaderDashboard({
             }}
           />
 
-          <NewReportModal
+          {/* 2. SHARED DASHBOARD WIDGETS (Perlita, Muro de Oración, Contenidos, Roster, Confidencialidad) */}
+          <View style={styles.sharedWidgetsWrapper}>
+            <SharedDashboardWidgets
+              onNavigateToBible={onNavigateToBible}
+              onNavigateToContent={onNavigateToContent}
+              onNavigateToPrayers={onNavigatePrayerWall}
+              onNavigateToBlogs={onNavigateToBlogs}
+              onJoinCall={onJoinCall}
+              onJoinChat={onJoinChat}
+              showRoster={true}
+            />
+          </View>
+
+          <NewReportModalPreview
             visible={showReportModal}
             sessionId={selectedSessionId || lastEndedSessionId || null}
             onClose={() => {
@@ -443,5 +481,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Theme.colors.onSurfaceVariant,
     textAlign: 'center',
+  },
+  sharedWidgetsWrapper: {
+    marginTop: 16,
+    width: '100%',
   },
 });

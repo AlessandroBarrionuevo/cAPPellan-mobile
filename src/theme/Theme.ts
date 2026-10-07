@@ -67,10 +67,24 @@ export const Theme = {
     full: 9999,
   },
   fonts: {
-    headline: 'IosevkaCharon_500Medium',
-    headlineBold: 'IosevkaCharon_700Bold',
-    body: 'Commissioner_400Regular',
-    bodySemiBold: 'Commissioner_600SemiBold',
+    // Primary Headline (Alef)
+    headline: 'Alef_400Regular',
+    headlineBold: 'Alef_700Bold',
+    // Secondary Body (Zain)
+    body: 'Zain_400Regular',
+    bodySemiBold: 'Zain_700Bold',
+    bodyLight: 'Zain_300Light',
+    bodyExtraLight: 'Zain_200ExtraLight',
+    bodyExtraBold: 'Zain_800ExtraBold',
+    bodyBlack: 'Zain_900Black',
+    bodyItalic: 'Zain_400Regular_Italic',
+    bodyLightItalic: 'Zain_300Light_Italic',
+
+    // Legacy fonts preserved for instant rollback
+    legacyHeadline: 'IosevkaCharon_500Medium',
+    legacyHeadlineBold: 'IosevkaCharon_700Bold',
+    legacyBody: 'Commissioner_400Regular',
+    legacyBodySemiBold: 'Commissioner_600SemiBold',
   },
 };
 
@@ -169,5 +183,12 @@ export const globalStyles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
+  },
+  shadowLg: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
   },
 });

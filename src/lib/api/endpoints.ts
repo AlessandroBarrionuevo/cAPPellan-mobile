@@ -50,6 +50,10 @@ export const ENDPOINTS = {
   BIBLE_DOWNLOAD: '/api/bible/download',
   // Section 5: Prayer Comments
   PRAYER_COMMENTS: (prayerId: number) => `/prayers/${prayerId}/comments`,
+  // Gratitude Wall (Muro de Gratitud)
+  GRATITUDES: '/gratitudes',
+  GRATITUDE_THANK: (id: number) => `/gratitudes/${id}/thank`,
+  GRATITUDE_COMMENTS: (id: number) => `/gratitudes/${id}/comments`,
   // Section 7: Chaplains & Profiles
   CHAPLAINS_TEAM: '/chaplains/team',
   CHAPLAIN_PROFILE: (id: number) => `/chaplains/${id}/profile`,

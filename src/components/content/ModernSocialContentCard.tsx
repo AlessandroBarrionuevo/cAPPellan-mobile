@@ -117,7 +117,7 @@ export const ModernSocialContentCard = React.memo(function ModernSocialContentCa
   const mediaSourceUri =
     content.type === 'YOUTUBE'
       ? youtubeThumbnail
-      : content.mediaUrl || 'https://images.unsplash.com/photo-1507692049790-de58290a4334?q=80&w=800';
+      : content.mediaUrl || 'https://images.unsplash.com/photo-1504052434569-70ad5836ab65?auto=format&fit=crop&q=80&w=800';
 
   return (
     <View style={styles.cardContainer}>

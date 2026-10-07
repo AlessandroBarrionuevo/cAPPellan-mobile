@@ -95,34 +95,30 @@ export default function LoginScreenPreview({
           <Text style={styles.brandPowered}>ellan</Text>
         </View>
 
-        {/* Hero Airplane-Window Capsule with App Logo and Floating Pills */}
         <View style={styles.heroVisualArea}>
           <View style={styles.capsuleWrapper}>
-            {/* Window Outer Bezel & Interior */}
+            {/* Institutional Logo y marco */}
             <View style={styles.windowFrame}>
               <Svg height="100%" width="100%" style={StyleSheet.absoluteFillObject}>
-                <Defs>
-                  <LinearGradient id="windowBg" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <Stop offset="0%" stopColor="#CFE2FE" stopOpacity="0.95" />
-                    <Stop offset="45%" stopColor="#E0EBFB" stopOpacity="0.9" />
-                    <Stop offset="100%" stopColor="#F8FAFC" stopOpacity="1" />
-                  </LinearGradient>
-                </Defs>
-                <Rect x="0" y="0" width="100%" height="100%" rx={74} fill="url(#windowBg)" />
-                <Circle cx="72" cy="60" r="48" fill="#FFFFFF" fillOpacity="0.35" />
-                <Circle cx="108" cy="95" r="32" fill="#FFFFFF" fillOpacity="0.25" />
+                {/* //Imagen de cappellan */}
+                {/* <Image
+                  source={require('../../assets/logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="cover"
+                /> */}
+                {/* //Imagen de capellania de la ciudad */}
+                <Image
+                  source={require('../../assets/cappellaniaEvangelicaPDCLogo.jpg')}
+                  style={styles.logoImage}
+                  resizeMode='cover'
+                />
               </Svg>
-
-              {/* Institutional Logo */}
-              <Image
-                source={require('../../assets/logo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+              
             </View>
+            <View><Text style={styles.imageSubtitle}>CAPELLANÍA EVANGÉLICA</Text></View>
 
             {/* Floating Badge 1 (Top Left): Fuerzas Armadas & de Seguridad */}
-            <View style={[styles.floatingPill, styles.pillTopLeft]}>
+            {/* <View style={[styles.floatingPill, styles.pillTopLeft]}>
               <View style={styles.pillIconBadge}>
                 <Shield size={12} color="#FFFFFF" strokeWidth={2.5} />
               </View>
@@ -130,10 +126,10 @@ export default function LoginScreenPreview({
                 <Text style={styles.pillTitle}>Fuerzas Armadas</Text>
                 <Text style={styles.pillSubtitle}>y de Seguridad</Text>
               </View>
-            </View>
+            </View> */}
 
             {/* Floating Badge 2 (Bottom Right): Secreto Pastoral & Confidencial */}
-            <View style={[styles.floatingPill, styles.pillBottomRight]}>
+            {/* <View style={[styles.floatingPill, styles.pillBottomRight]}>
               <View style={styles.pillIconBadge}>
                 <ShieldCheck size={13} color="#FFFFFF" strokeWidth={2.5} />
               </View>
@@ -141,21 +137,21 @@ export default function LoginScreenPreview({
                 <Text style={styles.pillTitle}>Secreto Pastoral</Text>
                 <Text style={styles.pillSubtitle}>100% Confidencial</Text>
               </View>
-            </View>
+            </View> */}
           </View>
         </View>
 
         {/* Central Titles (Styled after Travel Planning Simplified) */}
         <View style={styles.headlineArea}>
-          <Text style={styles.kickerText}>CAPELLANÍA EVANGÉLICA</Text>
-          <Text style={styles.mainTitle}>Bienvenido{'\n'}de nuevo</Text>
+          <Text style={styles.mainTitle}>Bienvenido de nuevo</Text>
           <Text style={styles.subtitle}>
-            Servicio y contención espiritual para Fuerzas Armadas y de Seguridad. Ingresá tus credenciales seguras.
+            Servicio y contención espiritual para Agentes de la Policia de la Ciudad
           </Text>
         </View>
 
         {/* Form Inputs (Replacing social login buttons) */}
         <View style={styles.formArea}>
+          <Text style={styles.formSubtitle}>Ingresá con tu cuenta</Text>
           {/* Email / Credential Input */}
           <View
             style={[
@@ -292,6 +288,13 @@ export default function LoginScreenPreview({
             Canal cifrado de extremo a extremo y de estricta reserva pastoral.{'\n'}
             <Text style={styles.footerHighlight}>Secreto Profesional & Pastoral</Text>
           </Text>
+          <TouchableOpacity
+              
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.forgotText}>Politicas de uso y privacidad</Text>
+            </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -355,7 +358,7 @@ const styles = StyleSheet.create({
   },
   windowFrame: {
     width: 148,
-    height: 184,
+    height: 148,
     borderRadius: 74,
     backgroundColor: '#EAF3FC',
     borderWidth: 5,
@@ -377,8 +380,8 @@ const styles = StyleSheet.create({
     }),
   },
   logoImage: {
-    width: 82,
-    height: 82,
+    width: '100%',
+    height: '100%',
   },
   floatingPill: {
     position: 'absolute',
@@ -436,8 +439,16 @@ const styles = StyleSheet.create({
   headlineArea: {
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 0,
     paddingHorizontal: 12,
+  },
+  imageSubtitle: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 12,
+    color: Theme.colors.tacticalNavy,
+    letterSpacing: 1.2,
+    marginTop: 6,
+    textTransform: 'uppercase',
   },
   kickerText: {
     fontFamily: Theme.fonts.headlineBold,
@@ -456,6 +467,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   subtitle: {
+    width: '100%',
     fontFamily: Theme.fonts.body,
     fontSize: 13.5,
     color: '#64748B',
@@ -464,9 +476,18 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     maxWidth: 310,
   },
+  formSubtitle: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 16,
+    lineHeight: 34,
+    color: '#0F172A',
+    textAlign: 'center',
+    letterSpacing: -0.6,
+    marginBottom: 10,
+  },
   formArea: {
     width: '100%',
-    marginTop: 4,
+    marginTop: 0,
   },
   inputPill: {
     flexDirection: 'row',
@@ -619,12 +640,13 @@ const styles = StyleSheet.create({
   footerNote: {
     fontFamily: Theme.fonts.body,
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: '#0b1015',
     textAlign: 'center',
     lineHeight: 16,
   },
   footerHighlight: {
     fontFamily: Theme.fonts.bodySemiBold,
     color: '#475569',
+    fontSize: 13,
   },
 });

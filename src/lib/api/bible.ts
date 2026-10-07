@@ -9,6 +9,8 @@ import type {
   BibleMetadata,
   BibleSearchResult,
 } from '../../types/bible';
+
+export type { Perlita };
 import {
   saveCachedBooks,
   loadCachedBooks,

@@ -22,13 +22,11 @@ import {
   BookOpen,
   Search,
   X,
-  ZoomIn,
-  ZoomOut,
   ShieldCheck,
   Image as ImageIcon,
   Check,
-  Sliders,
 } from 'lucide-react-native';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { Theme } from '../theme/Theme';
 import { useAppInsets } from '../lib/safeArea';
 import {
@@ -129,8 +127,23 @@ const CANONICAL_BOOKS: CanonicalBook[] = [
 
 const TOTAL_BIBLE_CHAPTERS = 1189;
 
+const LOCAL_BANNER_IMAGE = require('../../assets/bannerBibleReader.png');
+
+interface BannerPreset {
+  id: string;
+  title: string;
+  uri?: string;
+  localSource?: any;
+}
+
 // Curated Scenic Backgrounds for Banner
-const BANNER_PRESETS = [
+const BANNER_PRESETS: BannerPreset[] = [
+  {
+    id: 'chaplain-bible',
+    title: 'Biblia en Servicio',
+    localSource: LOCAL_BANNER_IMAGE,
+    uri: 'local-chaplain-bible',
+  },
   {
     id: 'sunrise',
     title: 'Amanecer en el Monte',
@@ -185,7 +198,7 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
   const [savedVerses, setSavedVerses] = useState<Set<string>>(new Set(['PSA-23-1']));
 
   // Banner State (Hero banner with customizable image)
-  const [bannerImageUri, setBannerImageUri] = useState<string>(BANNER_PRESETS[0].uri);
+  const [bannerImageUri, setBannerImageUri] = useState<string>('local-chaplain-bible');
   const [showBannerPickerModal, setShowBannerPickerModal] = useState<boolean>(false);
 
   // Full Scripture Selector Modal: Book, Chapter & Verse
@@ -204,9 +217,13 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
   // Bookmarks Modal
   const [showBookmarksModal, setShowBookmarksModal] = useState(false);
 
-  // Font Size Controller (Floating Collapsible Slider)
+  // Font Size Controller (Adjustable via bottom A- / A+ buttons)
   const [fontSize, setFontSize] = useState<number>(16); // 13 to 24
-  const [isFontSliderOpen, setIsFontSliderOpen] = useState<boolean>(false);
+
+  // Verse Scrolling / Layout Refs for direct focus
+  const verseLayoutsRef = useRef<{ [verseNum: string]: number }>({});
+  const readingCardYRef = useRef<number>(0);
+  const versesWrapperYRef = useRef<number>(0);
 
   // 1. Initial Load of Books
   useEffect(() => {
@@ -256,13 +273,20 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
     let isMounted = true;
     setIsLoadingChapter(true);
     setChapterError(null);
+    verseLayoutsRef.current = {};
 
     getBibleChapter(selectedBookCode, selectedChapterNumber)
       .then((data) => {
         if (!isMounted) return;
         setChapterData(data);
         setIsLoadingChapter(false);
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        if (selectedVerseNumber && selectedVerseNumber !== '1') {
+          setTimeout(() => {
+            scrollToVerse(selectedVerseNumber, true);
+          }, 200);
+        } else {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        }
       })
       .catch(() => {
         if (!isMounted) return;
@@ -287,6 +311,13 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
             })),
           };
           setChapterData(fallbackChapter);
+          if (selectedVerseNumber && selectedVerseNumber !== '1') {
+            setTimeout(() => {
+              scrollToVerse(selectedVerseNumber, true);
+            }, 200);
+          } else {
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          }
         } else {
           setChapterError('Capítulo no disponible en modo offline.');
         }
@@ -347,6 +378,40 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
     }
   };
 
+  // Verse Navigation & Scroll-to-focus
+  const totalVersesInChapter = useMemo(() => {
+    return chapterData?.verses?.length || tempTotalVerses || 1;
+  }, [chapterData, tempTotalVerses]);
+
+  const currentVerseNum = useMemo(() => {
+    const num = parseInt(selectedVerseNumber || '1', 10);
+    return isNaN(num) || num < 1 ? 1 : num;
+  }, [selectedVerseNumber]);
+
+  const scrollToVerse = (verseNum: string, animated = true) => {
+    const verseY = verseLayoutsRef.current[verseNum];
+    if (verseY !== undefined && scrollViewRef.current) {
+      const targetY = Math.max(0, readingCardYRef.current + versesWrapperYRef.current + verseY - 24);
+      scrollViewRef.current.scrollTo({ y: targetY, animated });
+    }
+  };
+
+  const handlePrevVerse = () => {
+    if (currentVerseNum > 1) {
+      const target = String(currentVerseNum - 1);
+      setSelectedVerseNumber(target);
+      scrollToVerse(target, true);
+    }
+  };
+
+  const handleNextVerse = () => {
+    if (currentVerseNum < totalVersesInChapter) {
+      const target = String(currentVerseNum + 1);
+      setSelectedVerseNumber(target);
+      scrollToVerse(target, true);
+    }
+  };
+
   // Open Full Selector Modal
   const handleOpenSelector = (initialTab: 'BOOK' | 'CHAPTER' | 'VERSE') => {
     setTempBookCode(selectedBookCode);
@@ -392,6 +457,9 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
     setSelectedChapterNumber(tempChapterNumber);
     setSelectedVerseNumber(String(verseNum));
     setShowFullSelectorModal(false);
+    setTimeout(() => {
+      scrollToVerse(String(verseNum), true);
+    }, 250);
   };
 
   // Share Passage or Selected Verse
@@ -462,18 +530,34 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
       {/* ==================================================================== */}
       <View style={styles.bannerContainer}>
         {/* Background Image or Solid Tactical Blue Fallback */}
-        {bannerImageUri ? (
+        {bannerImageUri === 'local-chaplain-bible' ? (
+          <Image
+            source={LOCAL_BANNER_IMAGE}
+            style={styles.bannerImage}
+            resizeMode="cover"
+          />
+        ) : bannerImageUri ? (
           <Image
             source={{ uri: bannerImageUri }}
-            style={StyleSheet.absoluteFillObject}
+            style={styles.bannerImage}
             resizeMode="cover"
           />
         ) : (
           <View style={[StyleSheet.absoluteFillObject, styles.solidBannerBg]} />
         )}
 
-        {/* Dark Gradient Overlay for Ultra-Clean Text Legibility */}
-        <View style={styles.bannerOverlay} />
+        {/* Gradient Contrast Overlay for Ultra-Clean Text Legibility */}
+        <Svg height="100%" width="100%" style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          <Defs>
+            <LinearGradient id="heroBannerGradient" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor="#0B1323" stopOpacity="0.65" />
+              <Stop offset="28%" stopColor="#0B1323" stopOpacity="0.22" />
+              <Stop offset="62%" stopColor="#0B1323" stopOpacity="0.55" />
+              <Stop offset="100%" stopColor="#0B1323" stopOpacity="0.88" />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroBannerGradient)" />
+        </Svg>
 
         {/* Top Bar Floating Over Banner */}
         <View style={[styles.bannerTopBar, { paddingTop: Math.max(insets.top, 10) }]}>
@@ -680,7 +764,12 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
         </View>
 
         {/* SCRIPTURE TEXT READING BODY */}
-        <View style={styles.readingCard}>
+        <View
+          style={styles.readingCard}
+          onLayout={(e) => {
+            readingCardYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
           {isLoadingChapter ? (
             <View style={styles.centerLoading}>
               <ActivityIndicator size="large" color={Theme.colors.primary} />
@@ -697,7 +786,12 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.versesWrapper}>
+            <View
+              style={styles.versesWrapper}
+              onLayout={(e) => {
+                versesWrapperYRef.current = e.nativeEvent.layout.y;
+              }}
+            >
               <Text style={styles.chapterBadgeHeader}>
                 {selectedBookName.toUpperCase()} · CAPÍTULO {selectedChapterNumber}
               </Text>
@@ -710,15 +804,20 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
                 return (
                   <TouchableOpacity
                     key={verse.verse}
+                    onLayout={(e) => {
+                      verseLayoutsRef.current[verse.verse] = e.nativeEvent.layout.y;
+                    }}
                     style={[
                       styles.verseRow,
                       isSelected && styles.verseRowSelected,
                     ]}
-                    onPress={() =>
-                      setSelectedVerseNumber(
-                        isSelected ? null : verse.verse
-                      )
-                    }
+                    onPress={() => {
+                      const next = isSelected ? null : verse.verse;
+                      setSelectedVerseNumber(next);
+                      if (next) {
+                        scrollToVerse(next, true);
+                      }
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text
@@ -764,123 +863,80 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
       </ScrollView>
 
       {/* ==================================================================== */}
-      {/* 3. FLOATING COLLAPSIBLE FONT SIZE CONTROLLER (LEFT SIDE)             */}
+      {/* 3. FLOATING VERSE NAVIGATOR & FONT SIZE CONTROLS (A- / A+)           */}
       {/* ==================================================================== */}
-      {!isFontSliderOpen ? (
-        <TouchableOpacity
-          style={styles.floatingZoomBtn}
-          onPress={() => setIsFontSliderOpen(true)}
-          activeOpacity={0.85}
-        >
-          <ZoomIn size={18} color={Theme.colors.primary} />
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.verticalSliderContainer}>
-          {/* Collapse Button */}
+      <View style={styles.bottomControlArea} pointerEvents="box-none">
+        <View style={styles.capsuleNavRow} pointerEvents="box-none">
+          {/* Left: Decrease Font Size (A-) */}
           <TouchableOpacity
-            style={styles.fontCollapseBtn}
-            onPress={() => setIsFontSliderOpen(false)}
-            activeOpacity={0.8}
-          >
-            <ZoomOut size={16} color={Theme.colors.primary} />
-          </TouchableOpacity>
-
-          {/* Step Up A+ */}
-          <TouchableOpacity
-            style={styles.fontStepButton}
-            onPress={() => setFontSize((prev) => Math.min(prev + 1, 24))}
-          >
-            <Text style={styles.fontStepText}>A+</Text>
-          </TouchableOpacity>
-
-          {/* Slider Track with fill */}
-          <View style={styles.sliderTrack}>
-            <View
-              style={[
-                styles.sliderFill,
-                { height: `${((fontSize - 13) / 11) * 100}%` },
-              ]}
-            />
-            <View
-              style={[
-                styles.sliderThumb,
-                { bottom: `${((fontSize - 13) / 11) * 85}%` },
-              ]}
-            />
-          </View>
-
-          {/* Step Down A- */}
-          <TouchableOpacity
-            style={styles.fontStepButton}
+            style={[
+              styles.capsuleSideBtn,
+              fontSize <= 13 && styles.capsuleSideBtnDisabled,
+            ]}
             onPress={() => setFontSize((prev) => Math.max(prev - 1, 13))}
-          >
-            <Text style={styles.fontStepText}>A-</Text>
-          </TouchableOpacity>
-
-          {/* Indicator Value */}
-          <Text style={styles.fontSizeIndicatorText}>{fontSize}</Text>
-        </View>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 4. BOTTOM CONTROLS & GLOBAL BIBLE PROGRESS TRACKER                  */}
-      {/* ==================================================================== */}
-      <View style={[styles.bottomControlArea, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        {/* BOTTOM NAVIGATION CAPSULE */}
-        <View style={styles.capsuleNavRow}>
-          {/* Left: Bookmarks / Guardados */}
-          <TouchableOpacity
-            style={styles.capsuleSideBtn}
-            onPress={() => setShowBookmarksModal(true)}
+            disabled={fontSize <= 13}
             activeOpacity={0.75}
+            accessibilityLabel="Reducir tamaño de letra"
           >
-            <Bookmark size={20} color={Theme.colors.primary} />
+            <Text style={[styles.fontSizeBtnText, fontSize <= 13 && styles.fontSizeBtnTextDisabled]}>
+              A-
+            </Text>
           </TouchableOpacity>
 
-          {/* Center Navigation Pill: < Capítulo 23 / 150 > */}
+          {/* Center Navigation Pill: Verse Focus (< Versículo X de Y >) */}
           <View style={styles.centerNavigationPill}>
             <TouchableOpacity
-              onPress={handleGlobalPrevChapter}
-              disabled={currentGlobalChapter <= 1}
+              onPress={handlePrevVerse}
+              disabled={currentVerseNum <= 1}
               style={[
                 styles.navArrowBtn,
-                currentGlobalChapter <= 1 && styles.navArrowDisabled,
+                currentVerseNum <= 1 && styles.navArrowDisabled,
               ]}
               activeOpacity={0.7}
+              accessibilityLabel="Versículo anterior"
             >
               <ChevronLeft size={18} color="#FFFFFF" />
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleOpenSelector('CHAPTER')}
+              onPress={() => handleOpenSelector('VERSE')}
               style={styles.navChapterTitleBtn}
               activeOpacity={0.8}
+              accessibilityLabel="Seleccionar versículo"
             >
-              <Text style={styles.navChapterText}>
-                {selectedBookName} {selectedChapterNumber} ({selectedChapterNumber}/{totalChaptersInBook})
+              <Text style={styles.navChapterText} numberOfLines={1}>
+                {selectedBookName} {selectedChapterNumber}:{currentVerseNum} ({currentVerseNum}/{totalVersesInChapter})
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleGlobalNextChapter}
-              disabled={currentGlobalChapter >= TOTAL_BIBLE_CHAPTERS}
+              onPress={handleNextVerse}
+              disabled={currentVerseNum >= totalVersesInChapter}
               style={[
                 styles.navArrowBtn,
-                currentGlobalChapter >= TOTAL_BIBLE_CHAPTERS && styles.navArrowDisabled,
+                currentVerseNum >= totalVersesInChapter && styles.navArrowDisabled,
               ]}
               activeOpacity={0.7}
+              accessibilityLabel="Versículo siguiente"
             >
               <ChevronRight size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Right: Book / Canon Selector */}
+          {/* Right: Increase Font Size (A+) */}
           <TouchableOpacity
-            style={styles.capsuleSideBtn}
-            onPress={() => handleOpenSelector('BOOK')}
+            style={[
+              styles.capsuleSideBtn,
+              fontSize >= 24 && styles.capsuleSideBtnDisabled,
+            ]}
+            onPress={() => setFontSize((prev) => Math.min(prev + 1, 24))}
+            disabled={fontSize >= 24}
             activeOpacity={0.75}
+            accessibilityLabel="Aumentar tamaño de letra"
           >
-            <BookOpen size={20} color={Theme.colors.primary} />
+            <Text style={[styles.fontSizeBtnText, fontSize >= 24 && styles.fontSizeBtnTextDisabled]}>
+              A+
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1153,13 +1209,19 @@ export default function BibleReaderPreview({ onBack }: BibleReaderPreviewProps) 
                         isCurrent && styles.presetCardActive,
                       ]}
                       onPress={() => {
-                        setBannerImageUri(preset.uri);
+                        setBannerImageUri(preset.uri || '');
                         setShowBannerPickerModal(false);
                       }}
                       activeOpacity={0.8}
                     >
                       <View style={styles.presetImageContainer}>
-                        {preset.uri ? (
+                        {preset.localSource ? (
+                          <Image
+                            source={preset.localSource}
+                            style={styles.presetThumbnail}
+                            resizeMode="cover"
+                          />
+                        ) : preset.uri ? (
                           <Image
                             source={{ uri: preset.uri }}
                             style={styles.presetThumbnail}
@@ -1254,13 +1316,19 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#0F172A',
     justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  bannerImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
   solidBannerBg: {
     backgroundColor: '#0c7ae0',
   },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(11, 19, 35, 0.55)', // Semi-transparent dark contrast
+    backgroundColor: 'rgba(11, 19, 35, 0.40)', // Semi-transparent dark contrast fallback
   },
   bannerTopBar: {
     flexDirection: 'row',
@@ -1285,6 +1353,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bannerHeroContent: {
+    width: '100%',
     paddingHorizontal: 20,
     paddingBottom: 42, // Room for overlapping sheet
     alignItems: 'center',
@@ -1423,7 +1492,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAF9', // Clean reading surface
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 140, // Space for bottom capsule & progress bar
+    paddingBottom: 220, // Space for floating capsule and curved bottom navbar
     minHeight: 600,
     ...Platform.select({
       ios: {
@@ -1600,6 +1669,10 @@ const styles = StyleSheet.create({
   },
   verseRowSelected: {
     backgroundColor: '#EFF6FF',
+    borderLeftWidth: 3.5,
+    borderLeftColor: Theme.colors.primary,
+    borderRadius: 8,
+    paddingLeft: 8,
   },
   verseNumber: {
     fontFamily: Theme.fonts.bodySemiBold,
@@ -1623,198 +1696,54 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
-  // Floating Collapsible Font Controller
-  floatingZoomBtn: {
+  // Floating Verse Navigator & Font Size Controls
+  bottomControlArea: {
     position: 'absolute',
-    left: 12,
-    top: 270,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    bottom: 144, // Floats cleanly above CurvedBottomNavBar without any overlap or blocking
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    zIndex: 30,
+  },
+  capsuleNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  capsuleSideBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#BAE6FD',
-    zIndex: 40,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.12,
-        shadowRadius: 6,
+        shadowRadius: 5,
       },
       android: {
         elevation: 4,
       },
     }),
   },
-  verticalSliderContainer: {
-    position: 'absolute',
-    left: 12,
-    top: 250,
-    width: 36,
-    height: 180,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderWidth: 1.5,
-    borderColor: '#BAE6FD',
-    zIndex: 40,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
+  capsuleSideBtnDisabled: {
+    opacity: 0.45,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
   },
-  fontCollapseBtn: {
-    padding: 2,
-  },
-  fontStepButton: {
-    padding: 2,
-  },
-  fontStepText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 10.5,
+  fontSizeBtnText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 14.5,
     color: Theme.colors.primary,
   },
-  sliderTrack: {
-    width: 4,
-    flex: 1,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2,
-    marginVertical: 4,
-    position: 'relative',
-    justifyContent: 'flex-end',
-  },
-  sliderFill: {
-    width: '100%',
-    backgroundColor: Theme.colors.primary,
-    borderRadius: 2,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    left: -4,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Theme.colors.primary,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  fontSizeIndicatorText: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 9.5,
-    color: '#64748B',
-  },
-
-  // Bottom Progress & Navigation Controls
-  bottomControlArea: {
-    position: 'absolute',
-    bottom: 60,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 8,
-    paddingHorizontal: 16,    
-    
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
-  },
-  progressTrackerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  sliderStepArrowBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sliderStepArrowDisabled: {
-    opacity: 0.35,
-    backgroundColor: '#F1F5F9',
-  },
-  progressBarWrapper: {
-    flex: 1,
-    height: 24,
-    justifyContent: 'center',
-  },
-  progressBarTrack: {
-    height: 5,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2.5,
-    position: 'relative',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: Theme.colors.primary,
-    borderRadius: 2.5,
-  },
-  progressThumb: {
-    position: 'absolute',
-    top: -4.5,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: Theme.colors.primary,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  progressLabelWrap: {
-    alignItems: 'flex-end',
-    minWidth: 88,
-  },
-  progressLabel: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 10.5,
-    color: Theme.colors.primary,
-  },
-  progressSubLabel: {
-    fontFamily: Theme.fonts.body,
-    fontSize: 8.5,
+  fontSizeBtnTextDisabled: {
     color: '#94A3B8',
-  },
-  capsuleNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 0,
-    paddingBottom: 20,
-    paddingTop: 8
-  },
-  capsuleSideBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F0F7FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
   },
   centerNavigationPill: {
     flex: 1,
@@ -1826,12 +1755,23 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingHorizontal: 8,
     marginHorizontal: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.16,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   navArrowBtn: {
     padding: 6,
   },
   navArrowDisabled: {
-    opacity: 0.3,
+    opacity: 0.25,
   },
   navChapterTitleBtn: {
     flex: 1,

@@ -31,6 +31,8 @@ interface HubScreenProps {
   onNavigateToBlogs?: () => void;
   onNavigateToBible?: () => void;
   onContactChaplain?: () => void;
+  onNavigateToGuardia?: () => void;
+  onNavigateToInformes?: () => void;
 }
 
 export default function HubScreen({
@@ -38,6 +40,8 @@ export default function HubScreen({
   onNavigateToContent,
   onNavigateToBlogs,
   onContactChaplain,
+  onNavigateToGuardia,
+  onNavigateToInformes,
 }: HubScreenProps) {
   const { width } = useWindowDimensions();
 

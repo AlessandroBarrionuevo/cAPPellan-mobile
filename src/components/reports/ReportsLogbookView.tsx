@@ -26,7 +26,7 @@ import {
   FileCheck,
 } from 'lucide-react-native';
 import { TacticalCard, TacticalButton, FilterPills } from '../common';
-import NewReportModal from './NewReportModal';
+import { NewReportModalPreview } from './NewReportModalPreview';
 
 export interface ReportsLogbookViewProps {
   canSupervise?: boolean;
@@ -319,8 +319,8 @@ export function ReportsLogbookView({
         }
       />
 
-      {/* Modal to write new report */}
-      <NewReportModal
+      {/* Modal to write new report with clean preview design */}
+      <NewReportModalPreview
         visible={showNewModal}
         sessionId={activeSessionId || null}
         onClose={() => setShowNewModal(false)}

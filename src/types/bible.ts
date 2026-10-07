@@ -7,6 +7,8 @@ export interface Perlita {
   bookCode?: string;
   chapter?: number;
   verse?: string;
+  day?: number;
+  theme?: string;
   attribution?: string;
 }
 
