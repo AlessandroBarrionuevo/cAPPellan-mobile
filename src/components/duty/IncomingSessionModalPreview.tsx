@@ -204,7 +204,9 @@ export default function IncomingSessionModalPreview({
               </View>
             </View>
 
-            <Text style={styles.title}>Consulta de Guardia en Espera</Text>
+            <Text style={styles.title}>
+              {session.callerName || 'Consulta de Guardia en Espera'}
+            </Text>
 
             <View style={styles.modalityTag}>
               <Text style={styles.modalityTagText}>

@@ -85,6 +85,7 @@ export interface CallResponse {
   livekitRoomName?: string;
   token?: string | null;
   clientToken?: string | null;
+  callerName?: string | null;
   intake?: CallIntake | null;
 }
 

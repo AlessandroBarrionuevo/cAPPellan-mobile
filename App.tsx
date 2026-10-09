@@ -18,10 +18,17 @@ import {
 import { useAuthStore } from './src/lib/stores/auth';
 import { useCallStore } from './src/lib/stores/call';
 import { useChaplainStore } from './src/lib/stores/chaplain';
-import { request, setClientToken, getAuthToken } from './src/lib/api/client';
+import { request, setClientToken, getAuthToken, ApiError } from './src/lib/api/client';
 import { ENDPOINTS } from './src/lib/api/endpoints';
 import { SseClient } from './src/lib/api/sse';
-import { requestNotificationPermissionAndScheduleReminder } from './src/lib/notifications';
+import {
+  registerDevicePushToken,
+  unregisterDevicePushToken,
+  dismissIncomingCallNotifications,
+  startIncomingCallVibration,
+  stopIncomingCallVibration,
+} from './src/lib/notifications';
+import * as Notifications from 'expo-notifications';
 
 // Layouts
 import { AppLayout, AuthLayout, AppTab } from './src/layouts';
@@ -103,8 +110,78 @@ export default function App() {
 
   useEffect(() => {
     checkSession();
-    requestNotificationPermissionAndScheduleReminder();
   }, [checkSession]);
+
+  // Register push token when logged in
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerDevicePushToken();
+    }
+  }, [isAuthenticated]);
+
+  // Native Push Notifications listener (Incoming calls & Cancel calls from backend)
+  useEffect(() => {
+    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as any;
+      if (!data) return;
+
+      if (data.type === 'INCOMING_CALL') {
+        const assigned: CallResponse = {
+          sessionId: Number(data.sessionId),
+          sessionType: data.sessionType || 'VIDEO',
+          livekitRoomName: data.livekitRoom,
+          token: data.token,
+          clientToken: data.token,
+          callerName: data.callerName,
+          intake: data.callerMood ? { moodScore: Number(data.callerMood) } : undefined,
+        };
+        startIncomingCallVibration();
+        useChaplainStore.getState().setAssignedCall(assigned);
+        useCallStore.getState().setSession(assigned);
+        if (assigned.clientToken) {
+          setClientToken(assigned.clientToken);
+        }
+        setShowIncomingModal(true);
+      } else if (data.type === 'CANCEL_CALL') {
+        stopIncomingCallVibration();
+        dismissIncomingCallNotifications();
+        const currentAssigned = useChaplainStore.getState().assignedCall;
+        if (!data.sessionId || currentAssigned?.sessionId === Number(data.sessionId)) {
+          setShowIncomingModal(false);
+          useChaplainStore.getState().clearAssignedCall();
+          useCallStore.getState().resetCall();
+          Alert.alert('Guardia', 'Llamada cancelada o atendida en otro dispositivo.');
+        }
+      }
+    });
+
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as any;
+      if (data?.type === 'INCOMING_CALL') {
+        const assigned: CallResponse = {
+          sessionId: Number(data.sessionId),
+          sessionType: data.sessionType || 'VIDEO',
+          livekitRoomName: data.livekitRoom,
+          token: data.token,
+          clientToken: data.token,
+          callerName: data.callerName || 'Persona en necesidad',
+          intake: data.callerMood ? { moodScore: Number(data.callerMood) } : undefined,
+        };
+        startIncomingCallVibration();
+        useChaplainStore.getState().setAssignedCall(assigned);
+        useCallStore.getState().setSession(assigned);
+        if (assigned.clientToken) {
+          setClientToken(assigned.clientToken);
+        }
+        setShowIncomingModal(true);
+      }
+    });
+
+    return () => {
+      receivedSub.remove();
+      responseSub.remove();
+    };
+  }, []);
 
   // Global Real-Time SSE Push with Polling Fallback for assigned calls when chaplain is ONLINE
   useEffect(() => {
@@ -150,23 +227,33 @@ export default function App() {
       }
     });
 
-    sse.connect();
-
-    // 2. Secondary: Defensive polling fallback (relaxed to 6s)
-    const interval = setInterval(async () => {
-      try {
-        const assigned = await request<CallResponse>(ENDPOINTS.CALLS_ASSIGNED);
-        if (assigned && assigned.sessionId) {
-          handleIncomingAssigned(assigned);
-        }
-      } catch (err) {
-        // 204 No Content or transient glitch
+    sse.addEventListener('call-answered', (data: any) => {
+      stopIncomingCallVibration();
+      dismissIncomingCallNotifications();
+      const currentAssigned = useChaplainStore.getState().assignedCall;
+      if (!data?.sessionId || currentAssigned?.sessionId === Number(data.sessionId)) {
+        setShowIncomingModal(false);
+        useChaplainStore.getState().clearAssignedCall();
+        useCallStore.getState().resetCall();
+        Alert.alert('Llamada Atendida', 'La llamada ya fue atendida desde la consola Web.');
       }
-    }, 6000);
+    });
+
+    sse.addEventListener('call-cancelled', (data: any) => {
+      stopIncomingCallVibration();
+      dismissIncomingCallNotifications();
+      const currentAssigned = useChaplainStore.getState().assignedCall;
+      if (!data?.sessionId || currentAssigned?.sessionId === Number(data.sessionId)) {
+        setShowIncomingModal(false);
+        useChaplainStore.getState().clearAssignedCall();
+        useCallStore.getState().resetCall();
+      }
+    });
+
+    sse.connect();
 
     return () => {
       sse.close();
-      clearInterval(interval);
     };
   }, [isAuthenticated, user?.role, chaplainStatus, inCallView, inChatView, setAssignedCall]);
 
@@ -264,7 +351,10 @@ export default function App() {
         {
           text: 'Salir',
           style: 'destructive',
-          onPress: () => logout(),
+          onPress: async () => {
+            await unregisterDevicePushToken();
+            logout();
+          },
         },
       ]);
     };
@@ -430,27 +520,69 @@ export default function App() {
           visible={showIncomingModal && Boolean(assignedCall)}
           session={assignedCall}
           onAccept={async (sessionType: SessionType) => {
-            setShowIncomingModal(false);
-            try {
-              // Crucial: triggers pollAssignedCall in Spring Boot to switch status from WAITING to IN_PROGRESS
-              const refreshed = await request<CallResponse>(ENDPOINTS.CALLS_ASSIGNED);
-              if (refreshed) {
-                setAssignedCall(refreshed);
-                useCallStore.getState().setSession(refreshed);
-              }
-            } catch (err) {
-              console.warn('[App] Error claiming assigned call on backend:', err);
-            }
+            stopIncomingCallVibration();
+            dismissIncomingCallNotifications();
+            if (!assignedCall?.sessionId) return;
 
-            if (sessionType === 'CHAT') {
-              setActiveTab('chat');
-            } else {
-              setInCallView(true);
+            try {
+              // Section 4: Atomic Resolution POST /calls/{sessionId}/accept?channel=MOBILE
+              const acceptResponse = await request<CallResponse>(
+                ENDPOINTS.CALL_ACCEPT(assignedCall.sessionId),
+                {
+                  method: 'POST',
+                  headers: {
+                    'X-Device-Channel': 'MOBILE',
+                  },
+                }
+              );
+
+              if (acceptResponse) {
+                setAssignedCall(acceptResponse);
+                useCallStore.getState().setSession(acceptResponse);
+                if (acceptResponse.clientToken) {
+                  setClientToken(acceptResponse.clientToken);
+                }
+              }
+
+              setShowIncomingModal(false);
+
+              if (sessionType === 'CHAT' || acceptResponse?.sessionType === 'CHAT') {
+                setActiveTab('chat');
+              } else {
+                setInCallView(true);
+              }
+            } catch (err: any) {
+              console.warn('[App] Error accepting call on backend:', err?.status, err?.message, err?.body);
+              setShowIncomingModal(false);
+              useChaplainStore.getState().clearAssignedCall();
+              useCallStore.getState().resetCall();
+
+              // Scenario B: Conflict (Web Console already answered) — HTTP 409 Conflict
+              if (err instanceof ApiError && err.status === 409) {
+                const message =
+                  err.body?.status === 'ALREADY_TAKEN' || err.body?.error?.includes('already')
+                    ? 'La llamada ya fue atendida desde la consola Web.'
+                    : err.message || 'La llamada ya no se encuentra disponible.';
+                Alert.alert('Llamada Atendida', message);
+              } else {
+                Alert.alert(
+                  'Aviso de Conexión',
+                  err?.message || 'No se pudo conectar a la llamada de guardia.'
+                );
+              }
             }
           }}
           onReject={() => {
+            stopIncomingCallVibration();
+            dismissIncomingCallNotifications();
+            if (assignedCall?.sessionId) {
+              request(ENDPOINTS.CALL_END(assignedCall.sessionId), { method: 'POST' }).catch((err) =>
+                console.warn('[App] Error ending rejected call on backend:', err)
+              );
+            }
             setShowIncomingModal(false);
             clearAssignedCall();
+            useCallStore.getState().resetCall();
           }}
         />
       </>

@@ -10,7 +10,7 @@ import { Theme } from '../theme/Theme';
 import { useChaplainStore } from '../lib/stores/chaplain';
 import { useCallStore } from '../lib/stores/call';
 import { useAuthStore } from '../lib/stores/auth';
-import { request, setClientToken } from '../lib/api/client';
+import { request, setClientToken, ApiError } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAppInsets } from '../lib/safeArea';
 import DutyConsole from '../components/duty/DutyConsole';
@@ -75,14 +75,29 @@ export default function ChaplainDashboard({
   };
 
   const handleAcceptCall = async (sessionType: SessionType) => {
-    try {
-      const refreshed = await request<CallResponse>(ENDPOINTS.CALLS_ASSIGNED);
-      if (refreshed) {
-        setAssignedCall(refreshed);
-        useCallStore.getState().setSession(refreshed);
+    if (assignedCall?.sessionId) {
+      try {
+        const refreshed = await request<CallResponse>(
+          ENDPOINTS.CALL_ACCEPT(assignedCall.sessionId),
+          {
+            method: 'POST',
+            headers: {
+              'X-Device-Channel': 'MOBILE',
+            },
+          }
+        );
+        if (refreshed) {
+          setAssignedCall(refreshed);
+          useCallStore.getState().setSession(refreshed);
+        }
+      } catch (err: any) {
+        console.warn('[ChaplainDashboard] Error accepting assigned call:', err);
+        if (err instanceof ApiError && err.status === 409) {
+          Alert.alert('Llamada Atendida', 'La llamada ya fue atendida desde la consola Web.');
+          useChaplainStore.getState().clearAssignedCall();
+          return;
+        }
       }
-    } catch (err) {
-      console.warn('[ChaplainDashboard] Error claiming assigned call:', err);
     }
 
     if (sessionType === 'CHAT') {

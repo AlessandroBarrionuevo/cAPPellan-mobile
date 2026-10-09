@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# Expo cache
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native build artifacts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# local env overrides
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# Generated native folders (EAS will generate fresh prebuild in cloud from app.json)
+/android
+/ios
+
+# IMPORTANT: google-services.json is deliberately NOT ignored here!
+# .gitignore keeps it out of Git/GitHub, while EAS Build can package it locally.
+
