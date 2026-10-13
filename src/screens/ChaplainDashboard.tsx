@@ -13,6 +13,7 @@ import { useAuthStore } from '../lib/stores/auth';
 import { request, setClientToken, ApiError } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAppInsets } from '../lib/safeArea';
+import { dismissIncomingCallNotifications } from '../lib/notifications';
 import DutyConsole from '../components/duty/DutyConsole';
 import { NewReportModalPreview } from '../components/reports/NewReportModalPreview';
 import { SharedDashboardWidgets, DashboardHeader } from '../components/dashboard';
@@ -75,6 +76,7 @@ export default function ChaplainDashboard({
   };
 
   const handleAcceptCall = async (sessionType: SessionType) => {
+    void dismissIncomingCallNotifications();
     if (assignedCall?.sessionId) {
       try {
         const refreshed = await request<CallResponse>(

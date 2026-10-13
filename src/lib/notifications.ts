@@ -24,6 +24,12 @@ Notifications.setNotificationHandler({
   },
 });
 
+// 40 cycles of (800ms vibrate, 400ms pause) = 48 seconds of continuous call vibration
+const LONG_CALL_VIBRATION_PATTERN: number[] = [
+  0,
+  ...Array.from({ length: 40 }, () => [800, 400]).flat(),
+];
+
 /**
  * Configure high-priority Android notification channels for incoming calls and alerts
  */
@@ -31,12 +37,16 @@ export async function setupNotificationChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
 
   try {
-    // 1. High-priority channel for incoming pastoral calls (Wakes device & shows on lockscreen)
-    await Notifications.setNotificationChannelAsync('incoming-calls', {
+    // Clean up legacy channel with short vibration (Android caches channel vibration patterns immutably)
+    await Notifications.deleteNotificationChannelAsync('incoming-calls').catch(() => {});
+
+    // 1. High-priority channel for incoming pastoral calls (Wakes device & vibrates continuously ~48s)
+    await Notifications.setNotificationChannelAsync('incoming-calls-v2', {
       name: 'Llamadas de Guardia Pastoral',
       description: 'Alertas de llamadas y videollamadas entrantes en tiempo real',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500, 250, 500],
+      vibrationPattern: LONG_CALL_VIBRATION_PATTERN,
+      enableVibrate: true,
       lightColor: '#059669',
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
@@ -57,6 +67,25 @@ export async function setupNotificationChannels(): Promise<void> {
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
       sound: 'default',
     });
+
+    // 3. Interactive Notification Category with Action Buttons (Atender / Rechazar)
+    await Notifications.setNotificationCategoryAsync('incoming-call', [
+      {
+        identifier: 'ACCEPT',
+        buttonTitle: '🟢 Atender',
+        options: {
+          opensAppToForeground: true,
+        },
+      },
+      {
+        identifier: 'REJECT',
+        buttonTitle: '🔴 Rechazar',
+        options: {
+          isDestructive: true,
+          opensAppToForeground: false,
+        },
+      },
+    ]);
   } catch (err) {
     console.warn('[Notifications] Failed to setup notification channels:', err);
   }

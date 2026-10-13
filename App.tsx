@@ -112,10 +112,11 @@ export default function App() {
     checkSession();
   }, [checkSession]);
 
-  // Register push token when logged in
+  // Register push token & restore saved duty status when logged in
   useEffect(() => {
     if (isAuthenticated) {
       registerDevicePushToken();
+      useChaplainStore.getState().restoreStatus();
     }
   }, [isAuthenticated]);
 
@@ -155,9 +156,21 @@ export default function App() {
       }
     });
 
-    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
       const data = response.notification.request.content.data as any;
       if (data?.type === 'INCOMING_CALL') {
+        if (response.actionIdentifier === 'REJECT') {
+          stopIncomingCallVibration();
+          dismissIncomingCallNotifications();
+          if (data.sessionId) {
+            request(ENDPOINTS.CALL_END(Number(data.sessionId)), { method: 'POST' }).catch(() => {});
+          }
+          setShowIncomingModal(false);
+          useChaplainStore.getState().clearAssignedCall();
+          useCallStore.getState().resetCall();
+          return;
+        }
+
         const assigned: CallResponse = {
           sessionId: Number(data.sessionId),
           sessionType: data.sessionType || 'VIDEO',
@@ -175,7 +188,18 @@ export default function App() {
         }
         setShowIncomingModal(true);
       }
-    });
+    };
+
+    // Handle cold-start notification tap when app was killed
+    Notifications.getLastNotificationResponseAsync()
+      .then((initialResponse) => {
+        if (initialResponse) {
+          handleNotificationResponse(initialResponse);
+        }
+      })
+      .catch(() => {});
+
+    const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
     return () => {
       receivedSub.remove();
@@ -206,6 +230,7 @@ export default function App() {
         return;
       }
 
+      startIncomingCallVibration();
       setAssignedCall(assigned);
       useCallStore.getState().setSession(assigned);
       if (assigned.clientToken) {
