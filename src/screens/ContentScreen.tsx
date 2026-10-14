@@ -263,7 +263,7 @@ export default function ContentScreen() {
       </View>
 
       {/* 2.5 View Mode Switcher: Moderno (New Social Cutout) vs Clásico (Original) */}
-      <View style={styles.viewModeToggleRow}>
+      {/* <View style={styles.viewModeToggleRow}>
         <TouchableOpacity
           style={[
             styles.viewModeTab,
@@ -299,7 +299,7 @@ export default function ContentScreen() {
             Diseño Clásico
           </Text>
         </TouchableOpacity>
-      </View>
+      </View> */}
 
       {/* 3. Filter Pills */}
       <FilterPills

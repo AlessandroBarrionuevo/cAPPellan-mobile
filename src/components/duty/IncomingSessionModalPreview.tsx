@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     maxWidth: 480,
   },
   alertHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
@@ -360,6 +360,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    gap: 10,
   },
   beaconBadge: {
     flexDirection: 'row',

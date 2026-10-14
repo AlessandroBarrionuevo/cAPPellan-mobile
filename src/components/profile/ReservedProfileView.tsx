@@ -424,17 +424,13 @@ export default function ReservedProfileView({
                   onPress={() => setIsActiveInForce(true)}
                   activeOpacity={0.8}
                 >
-                  <CheckCircle2
-                    size={15}
-                    color={isActiveInForce ? '#FFFFFF' : Theme.colors.onSurfaceVariant}
-                  />
                   <Text
                     style={[
                       styles.statusToggleText,
                       isActiveInForce && styles.statusToggleTextActive,
                     ]}
                   >
-                    En Servicio Activo
+                    Servicio Activo
                   </Text>
                 </TouchableOpacity>
 
@@ -446,10 +442,6 @@ export default function ReservedProfileView({
                   onPress={() => setIsActiveInForce(false)}
                   activeOpacity={0.8}
                 >
-                  <CheckCircle2
-                    size={15}
-                    color={!isActiveInForce ? '#FFFFFF' : Theme.colors.onSurfaceVariant}
-                  />
                   <Text
                     style={[
                       styles.statusToggleText,
@@ -842,7 +834,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.surfaceContainerLow,
     borderRadius: Theme.roundness.md,
     paddingHorizontal: 10,
-    height: 40,
+    
     gap: 8,
   },
   textInput: {
@@ -1047,7 +1039,7 @@ const styles = StyleSheet.create({
     color: Theme.colors.onSurfaceVariant,
   },
   statusToggleContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 8,
     marginTop: 2,
   },

@@ -582,14 +582,14 @@ export default function BasicDashboardPreview({
               </View>
             </View>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.headerOriginalSwitchBtn}
               onPress={() => setShowOriginalDashboard(true)}
               activeOpacity={0.85}
             >
               <RotateCcw size={12} color="#0c7ae0" />
               <Text style={styles.headerOriginalSwitchText}>Original</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
 
           {/* Hero Banner with Cutout Shape & Corner Circular Action Buttons */}

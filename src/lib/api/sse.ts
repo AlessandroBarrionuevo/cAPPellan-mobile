@@ -94,6 +94,7 @@ export class SseClient {
     const fullUrl = this.endpoint.startsWith('http')
       ? this.endpoint
       : `${baseUrl}${this.endpoint}`;
+    console.log(`[SSE] Conectando -> ${fullUrl}`);
 
     try {
       const xhr = new XMLHttpRequest();

@@ -17,8 +17,11 @@ let activeClientToken: string | null = null;
 let activeAuthToken: string | null = null;
 let onUnauthorizedCallback: (() => void) | null = null;
 
+console.log(`[API Client] Base URL activa: ${customBaseUrl}`);
+
 export function setApiBaseUrl(url: string) {
   customBaseUrl = url;
+  console.log(`[API Client] Base URL actualizada: ${customBaseUrl}`);
 }
 
 export function getApiBaseUrl() {
@@ -56,6 +59,8 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   };
 
   const url = `${customBaseUrl}${endpoint}`;
+  const method = options.method || 'GET';
+  console.log(`[API] ${method} -> ${url}`);
 
   const response = await fetch(url, {
     ...options,

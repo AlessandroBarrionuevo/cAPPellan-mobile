@@ -163,7 +163,7 @@ export default function HubScreen({
       </View>
 
       {/* 4. Accesos Secundarios de Acompañamiento */}
-      <View style={styles.secondarySection}>
+      {/* <View style={styles.secondarySection}>
         <Text style={styles.secondarySectionTitle}>SERVICIOS AUXILIARES</Text>
 
         <TacticalCard style={styles.secondaryListCard} padding={0}>
@@ -211,10 +211,10 @@ export default function HubScreen({
             <ChevronRight size={18} color={Theme.colors.secondary} />
           </TouchableOpacity>
         </TacticalCard>
-      </View>
+      </View> */}
 
       {/* 5. Banner Institucional de Garantía y Amparo */}
-      <TacticalCard style={styles.guaranteeBanner} variant="high" padding={14}>
+      {/* <TacticalCard style={styles.guaranteeBanner} variant="high" padding={14}>
         <View style={styles.guaranteeRow}>
           <ShieldCheck size={22} color={Theme.colors.secondary} style={{ marginTop: 2 }} />
           <View style={styles.guaranteeCol}>
@@ -224,7 +224,7 @@ export default function HubScreen({
             </Text>
           </View>
         </View>
-      </TacticalCard>
+      </TacticalCard> */}
     </ScrollView>
   );
 }
