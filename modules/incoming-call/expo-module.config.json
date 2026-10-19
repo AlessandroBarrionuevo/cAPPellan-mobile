@@ -1,0 +1,7 @@
+{
+  "name": "incoming-call",
+  "platforms": ["android"],
+  "android": {
+    "modules": ["com.cappellan.incomingcall.IncomingCallModule"]
+  }
+}

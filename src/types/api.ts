@@ -46,11 +46,18 @@ export type SessionType = 'VIDEO' | 'CHAT';
 
 export type IntakeReason = 'FAMILIAR' | 'TRABAJO' | 'ECONOMICO' | 'FE' | 'OTRO';
 
+export type EndReason =
+  | 'MISSED_TIMEOUT'
+  | 'CHAPLAIN_BUSY'
+  | 'CANCELLED_BY_CALLER'
+  | 'COMPLETED';
+
 export interface CallIntake {
   moodScore?: number;
   reason?: IntakeReason | string;
   notes?: string;
-  metadata?: string;
+  metadata?: Record<string, any> | string;
+  anonymous?: boolean;
 }
 
 export interface CallRequestPayload {
@@ -58,7 +65,8 @@ export interface CallRequestPayload {
   moodScore?: number;
   reason?: IntakeReason | string;
   notes?: string;
-  metadata?: string;
+  metadata?: Record<string, any> | string;
+  anonymous?: boolean;
 }
 
 export interface Session {
@@ -75,6 +83,7 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   endedAt: string | null;
+  endReason?: EndReason | string | null;
 }
 
 export interface CallResponse {
@@ -82,11 +91,14 @@ export interface CallResponse {
   sessionType?: SessionType;
   provider?: 'livekit' | 'cloudflare';
   callsAppId?: string;
+  livekitRoom?: string;
   livekitRoomName?: string;
   token?: string | null;
   clientToken?: string | null;
   callerName?: string | null;
   intake?: CallIntake | null;
+  status?: 'WAITING' | 'IN_PROGRESS' | 'ENDED';
+  endReason?: EndReason | string | null;
 }
 
 export interface PostCallReport {

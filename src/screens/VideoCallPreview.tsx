@@ -18,7 +18,7 @@ import { useAppInsets } from '../lib/safeArea';
 import { useCallStore } from '../lib/stores/call';
 import { useAuthStore } from '../lib/stores/auth';
 import { useChaplainStore } from '../lib/stores/chaplain';
-import { request, setClientToken } from '../lib/api/client';
+import { request, setClientToken, getClientToken } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { ENV } from '../config/env';
 import { requestMediaPermissions } from '../lib/permissions';
@@ -408,9 +408,13 @@ function ActiveVideoCallViewport({
       // Disconnect errors cleanup
     }
 
-    if (isChaplainRole && session?.sessionId) {
+    if (session?.sessionId) {
       try {
-        await request(ENDPOINTS.CALL_END(session.sessionId), { method: 'POST' });
+        const cToken = session.clientToken || getClientToken();
+        await request(ENDPOINTS.CALL_END(session.sessionId), {
+          method: 'POST',
+          headers: cToken ? { 'X-Client-Token': cToken } : {},
+        });
       } catch (err: any) {
         if (err?.status !== 409 && err?.status !== 403) {
           console.warn('[VideoCallPreview] Backend session end returned:', err);

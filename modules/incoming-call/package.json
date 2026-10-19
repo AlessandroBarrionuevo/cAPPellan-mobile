@@ -1,0 +1,6 @@
+{
+  "name": "incoming-call",
+  "version": "0.1.0",
+  "description": "Native Android FullScreenIntent caller module for CapellanAPP",
+  "main": "index.ts"
+}

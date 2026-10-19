@@ -48,6 +48,7 @@ import {
 export interface ChatPreviewProps {
   onBack?: () => void;
   onChatEnded?: () => void;
+  onNavigateToPrayers?: () => void;
   sessionId?: number;
   clientToken?: string;
   isChaplainMode?: boolean;
@@ -93,6 +94,7 @@ const DEFAULT_CHAPLAIN_AVATAR =
 export default function ChatPreview({
   onBack,
   onChatEnded,
+  onNavigateToPrayers,
   sessionId: propSessionId,
   clientToken: propClientToken,
   isChaplainMode: propIsChaplainMode,
@@ -181,6 +183,7 @@ export default function ChatPreview({
   // Fallback and Intake Modal States
   const [showFallbackModal, setShowFallbackModal] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+  const [feedbackReason, setFeedbackReason] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const stompRef = useRef<ChatStompService | null>(null);
@@ -199,12 +202,13 @@ export default function ChatPreview({
   // Watch for call store errors (e.g. 404 No chaplains available)
   useEffect(() => {
     if (callError && (callError.includes('No hay capellanes') || callError.includes('disponibles'))) {
+      setFeedbackReason(null);
       setShowFallbackModal(true);
     }
   }, [callError]);
 
   // Central remote session termination handler
-  const handleRemoteSessionEnded = useCallback(() => {
+  const handleRemoteSessionEnded = useCallback((endReason?: string | null) => {
     if (isTerminatedRef.current) return;
     isTerminatedRef.current = true;
     setSessionStatus('ENDED');
@@ -215,23 +219,29 @@ export default function ChatPreview({
     }
 
     useChaplainStore.getState().clearAssignedCall();
+    useCallStore.getState().setEndReason(endReason || null, 'CHAT');
     resetCall();
 
     if (!isChaplainRole) {
-      Alert.alert(
-        'Consulta Concluida',
-        'El capellán ha dado por finalizada la sesión de acompañamiento.',
-        [
-          {
-            text: 'Entendido',
-            onPress: () => {
-              if (onChatEnded) onChatEnded();
-              else if (onBack) onBack();
+      if (endReason === 'MISSED_TIMEOUT' || endReason === 'CHAPLAIN_BUSY' || endReason === 'CANCELLED_BY_CALLER') {
+        setFeedbackReason(endReason);
+        setShowFallbackModal(true);
+      } else {
+        Alert.alert(
+          'Consulta Concluida',
+          'La sesión de acompañamiento pastoral ha finalizado.',
+          [
+            {
+              text: 'Entendido',
+              onPress: () => {
+                if (onChatEnded) onChatEnded();
+                else if (onBack) onBack();
+              },
             },
-          },
-        ],
-        { cancelable: false }
-      );
+          ],
+          { cancelable: false }
+        );
+      }
     } else {
       if (onChatEnded) onChatEnded();
       else if (onBack) onBack();
@@ -271,7 +281,7 @@ export default function ChatPreview({
     }
   }, [effectiveSessionId, effectiveClientToken]);
 
-  // 2. Pre-flight session verification & remote termination watch
+  // 2. Pre-flight session verification, SSE status stream & remote termination watch
   useEffect(() => {
     if (!effectiveSessionId) {
       setSessionStatus('ENDED');
@@ -281,6 +291,25 @@ export default function ChatPreview({
     let isMounted = true;
     isTerminatedRef.current = false;
 
+    // A. Instant SSE status-change stream
+    const sseUrl = ENDPOINTS.CALL_SSE_STATUS(effectiveSessionId, effectiveClientToken);
+    const sse = new SseClient(sseUrl);
+
+    sse.addEventListener('status-change', (data: any) => {
+      if (!isMounted) return;
+      if (data?.status === 'ENDED') {
+        console.log(`[ChatPreview] 🛑 Remote session status ended via SSE (Session #${effectiveSessionId}) with reason:`, data.endReason);
+        handleRemoteSessionEnded(data.endReason);
+      } else if (data?.status === 'IN_PROGRESS') {
+        setSessionStatus('IN_PROGRESS');
+      } else if (data?.status === 'WAITING') {
+        setSessionStatus('WAITING');
+      }
+    });
+
+    sse.connect();
+
+    // B. Polling fallback every 5s
     const checkSessionStatus = async () => {
       try {
         const detailUrl = effectiveClientToken
@@ -296,8 +325,8 @@ export default function ChatPreview({
         if (!isMounted) return;
 
         if (!detail || detail.status === 'ENDED') {
-          console.log(`[ChatPreview] 🛑 Remote session status ended (Session #${effectiveSessionId})`);
-          handleRemoteSessionEnded();
+          console.log(`[ChatPreview] 🛑 Remote session status ended (Session #${effectiveSessionId}) with reason:`, detail?.endReason);
+          handleRemoteSessionEnded(detail?.endReason);
         } else if (detail.status === 'WAITING') {
           setSessionStatus('WAITING');
         } else if (detail.status === 'IN_PROGRESS') {
@@ -314,11 +343,12 @@ export default function ChatPreview({
 
     void checkSessionStatus();
 
-    // Secondary poll: every 6 seconds check if session is still alive
-    const interval = setInterval(checkSessionStatus, 6000);
+    // Secondary poll: every 5 seconds check if session is still alive
+    const interval = setInterval(checkSessionStatus, 5000);
 
     return () => {
       isMounted = false;
+      sse.close();
       clearInterval(interval);
     };
   }, [effectiveSessionId, effectiveClientToken, handleRemoteSessionEnded]);
@@ -605,12 +635,17 @@ export default function ChatPreview({
         {/* The requested Fallback Cartel with Emergency Numbers & Social Networks */}
         <NoChaplainAvailableModal
           visible={showFallbackModal}
+          endReason={feedbackReason}
+          sessionType="CHAT"
+          onNavigateToPrayers={onNavigateToPrayers}
           onClose={() => {
             setShowFallbackModal(false);
+            setFeedbackReason(null);
             resetCall();
           }}
           onRetry={() => {
             setShowFallbackModal(false);
+            setFeedbackReason(null);
             resetCall();
             setShowIntakeModal(true);
           }}
@@ -724,11 +759,24 @@ export default function ChatPreview({
         {/* Fallback Modal Accessible Anytime */}
         <NoChaplainAvailableModal
           visible={showFallbackModal}
-          onClose={() => setShowFallbackModal(false)}
+          endReason={feedbackReason}
+          sessionType="CHAT"
+          onNavigateToPrayers={onNavigateToPrayers}
+          onClose={() => {
+            setShowFallbackModal(false);
+            setFeedbackReason(null);
+            if (isTerminatedRef.current) {
+              if (onChatEnded) onChatEnded();
+              else if (onBack) onBack();
+            }
+          }}
           onRetry={() => {
             setShowFallbackModal(false);
+            setFeedbackReason(null);
             if (stompRef.current) {
               stompRef.current.connect();
+            } else {
+              setShowIntakeModal(true);
             }
           }}
         />
@@ -907,9 +955,20 @@ export default function ChatPreview({
       {/* Fallback Cartel Accessible at Any Time */}
       <NoChaplainAvailableModal
         visible={showFallbackModal}
-        onClose={() => setShowFallbackModal(false)}
+        endReason={feedbackReason}
+        sessionType="CHAT"
+        onNavigateToPrayers={onNavigateToPrayers}
+        onClose={() => {
+          setShowFallbackModal(false);
+          setFeedbackReason(null);
+          if (isTerminatedRef.current) {
+            if (onChatEnded) onChatEnded();
+            else if (onBack) onBack();
+          }
+        }}
         onRetry={() => {
           setShowFallbackModal(false);
+          setFeedbackReason(null);
           setShowIntakeModal(true);
         }}
       />

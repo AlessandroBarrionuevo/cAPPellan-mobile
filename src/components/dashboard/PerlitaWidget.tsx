@@ -1,15 +1,30 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
+  Alert,
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { TacticalCard } from '../common';
-import { Sparkles, RefreshCw, Share2, BookOpen } from 'lucide-react-native';
+import {
+  Sparkles,
+  RefreshCw,
+  Share2,
+  BookOpen,
+  Smartphone,
+  Lock,
+} from 'lucide-react-native';
 import type { Perlita } from '../../types/bible';
+import {
+  syncPerlitaToAndroidWidget,
+  pinPerlitaWidgetToHomeScreen,
+  isLockScreenPerlitaEnabled,
+  toggleLockScreenPerlita,
+} from '../../widgets/widgetTaskHandler';
 
 interface PerlitaWidgetProps {
   perlita: Perlita | null;
@@ -28,6 +43,41 @@ export function PerlitaWidget({
   onSharePerlita,
   onNavigateToBible,
 }: PerlitaWidgetProps) {
+  const [lockScreenEnabled, setLockScreenEnabled] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      isLockScreenPerlitaEnabled().then(setLockScreenEnabled);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'android' && perlita) {
+      syncPerlitaToAndroidWidget(perlita, isRandom);
+    }
+  }, [perlita, isRandom]);
+
+  const handlePinHomeWidget = async () => {
+    const pinned = await pinPerlitaWidgetToHomeScreen(perlita);
+    if (!pinned) {
+      Alert.alert(
+        'Widget de Pantalla Principal',
+        'Mantené presionado un espacio vacío en la pantalla principal de tu celular, tocá "Widgets" y seleccioná "Perlita del Día" de CapellanAPP.'
+      );
+    }
+  };
+
+  const handleToggleLockScreen = async () => {
+    const nextState = await toggleLockScreenPerlita(perlita);
+    setLockScreenEnabled(nextState);
+    if (nextState) {
+      Alert.alert(
+        'Fijada en Pantalla de Bloqueo',
+        'La Perlita del Día ahora se muestra de forma silenciosa en tu pantalla de bloqueo y se renovará automáticamente cada mañana.'
+      );
+    }
+  };
+
   return (
     <TacticalCard style={styles.reflectionCard} padding={16}>
       <View style={styles.reflectionHeader}>
@@ -109,6 +159,45 @@ export function PerlitaWidget({
               )}
             </View>
           </View>
+
+          {Platform.OS === 'android' && (
+            <View style={styles.androidWidgetActionsRow}>
+              <TouchableOpacity
+                style={styles.androidChipBtn}
+                onPress={handlePinHomeWidget}
+                activeOpacity={0.8}
+                accessibilityLabel="Anclar widget en pantalla principal"
+              >
+                <Smartphone size={12} color={Theme.colors.tacticalNavy} />
+                <Text style={styles.androidChipText}>Widget en Inicio</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.androidChipBtn,
+                  lockScreenEnabled && styles.androidChipBtnActive,
+                ]}
+                onPress={handleToggleLockScreen}
+                activeOpacity={0.8}
+                accessibilityLabel="Fijar perlita en pantalla de bloqueo"
+              >
+                <Lock
+                  size={12}
+                  color={lockScreenEnabled ? '#FFFFFF' : Theme.colors.tacticalNavy}
+                />
+                <Text
+                  style={[
+                    styles.androidChipText,
+                    lockScreenEnabled && styles.androidChipTextActive,
+                  ]}
+                >
+                  {lockScreenEnabled
+                    ? 'Activa en Bloqueo'
+                    : 'Fijar en Bloqueo'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </>
       )}
     </TacticalCard>
@@ -241,5 +330,40 @@ const styles = StyleSheet.create({
     ...globalStyles.bodySm,
     fontSize: 12,
     color: Theme.colors.onSurfaceVariant,
+  },
+  androidWidgetActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  androidChipBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  androidChipBtnActive: {
+    backgroundColor: Theme.colors.tacticalNavy,
+    borderColor: Theme.colors.tacticalNavy,
+  },
+  androidChipText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 11,
+    color: Theme.colors.tacticalNavy,
+  },
+  androidChipTextActive: {
+    color: '#FFFFFF',
   },
 });

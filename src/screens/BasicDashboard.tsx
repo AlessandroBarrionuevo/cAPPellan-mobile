@@ -198,9 +198,12 @@ export default function BasicDashboard({
   const endCall = useCallStore((state) => state.endCall);
 
   const [showNoChaplainsModal, setShowNoChaplainsModal] = useState(false);
+  const [feedbackReason, setFeedbackReason] = useState<string | null>(null);
+  const [feedbackSessionType, setFeedbackSessionType] = useState<SessionType>('VIDEO');
 
   useEffect(() => {
     if (error && (error.includes('No hay capellanes') || error.includes('disponibles'))) {
+      setFeedbackReason(null);
       setShowNoChaplainsModal(true);
     }
   }, [error]);
@@ -246,7 +249,8 @@ export default function BasicDashboard({
     const handleTransition = (
       newStatus: string,
       sessionType?: SessionType,
-      livekitRoomName?: string
+      livekitRoomName?: string,
+      endReason?: string | null
     ) => {
       if (isFinished) return;
 
@@ -266,7 +270,16 @@ export default function BasicDashboard({
         }
       } else if (newStatus === 'ENDED') {
         isFinished = true;
+        const targetType = sessionType || currentSession.sessionType || selectedType;
         useCallStore.getState().setCallStatus('ENDED');
+        useCallStore.getState().setEndReason(endReason || null, targetType);
+        resetCall();
+
+        if (endReason === 'MISSED_TIMEOUT' || endReason === 'CHAPLAIN_BUSY' || endReason === 'CANCELLED_BY_CALLER') {
+          setFeedbackReason(endReason);
+          setFeedbackSessionType(targetType);
+          setShowNoChaplainsModal(true);
+        }
       }
     };
 
@@ -279,7 +292,7 @@ export default function BasicDashboard({
 
     sse.addEventListener('status-change', (data: any) => {
       if (data && data.status) {
-        handleTransition(data.status, data.sessionType, data.livekitRoomName);
+        handleTransition(data.status, data.sessionType, data.livekitRoomName, data.endReason);
       }
     });
 
@@ -295,7 +308,8 @@ export default function BasicDashboard({
         handleTransition(
           sessionDetail.status,
           sessionDetail.sessionType,
-          sessionDetail.livekitRoomName
+          sessionDetail.livekitRoomName,
+          sessionDetail.endReason
         );
       } catch (e) {
         // Retry
@@ -307,7 +321,7 @@ export default function BasicDashboard({
       sse.close();
       clearInterval(interval);
     };
-  }, [callStatus, currentSession, onJoinCall, onJoinChat]);
+  }, [callStatus, currentSession, onJoinCall, onJoinChat, selectedType, resetCall]);
 
   const handleStartCall = async (
     type: SessionType = selectedType,
@@ -684,14 +698,20 @@ export default function BasicDashboard({
       {/* No Chaplains Available Support Modal */}
       <NoChaplainAvailableModal
         visible={showNoChaplainsModal}
+        endReason={feedbackReason}
+        sessionType={feedbackSessionType || selectedType}
+        onNavigateToPrayers={onNavigateToPrayers}
         onClose={() => {
           setShowNoChaplainsModal(false);
+          setFeedbackReason(null);
           resetCall();
         }}
         onRetry={() => {
           setShowNoChaplainsModal(false);
+          const typeToRetry = feedbackSessionType || selectedType;
+          setFeedbackReason(null);
           resetCall();
-          handleStartCall(selectedType);
+          handleStartCall(typeToRetry);
         }}
       />
     </>

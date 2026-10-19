@@ -10,6 +10,20 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data;
     const isIncomingCall = data?.type === 'INCOMING_CALL';
+    const isPerlitaLockscreen =
+      data?.type === 'PERLITA_LOCKSCREEN' ||
+      data?.type === 'PERLITA_LOCKSCREEN_DAILY';
+
+    if (isPerlitaLockscreen) {
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: true,
+        priority: Notifications.AndroidNotificationPriority.LOW,
+      };
+    }
 
     return {
       shouldShowAlert: true,
@@ -37,27 +51,47 @@ export async function setupNotificationChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
 
   try {
-    // Clean up legacy channel with short vibration (Android caches channel vibration patterns immutably)
+    // Clean up legacy channels with short vibration or default sound
     await Notifications.deleteNotificationChannelAsync('incoming-calls').catch(() => {});
+    await Notifications.deleteNotificationChannelAsync('incoming-calls-v2').catch(() => {});
 
-    // 1. High-priority channel for incoming pastoral calls (Wakes device & vibrates continuously ~48s)
-    await Notifications.setNotificationChannelAsync('incoming-calls-v2', {
+    // 1. High-priority channel for incoming pastoral calls with ringtone & long vibration (~48s)
+    await Notifications.setNotificationChannelAsync('incoming-calls-v3', {
       name: 'Llamadas de Guardia Pastoral',
       description: 'Alertas de llamadas y videollamadas entrantes en tiempo real',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: LONG_CALL_VIBRATION_PATTERN,
       enableVibrate: true,
+      enableLights: true,
       lightColor: '#059669',
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
-      sound: 'default',
+      sound: 'incoming_call',
       audioAttributes: {
-        usage: Notifications.AndroidAudioUsage.NOTIFICATION_COMMUNICATION_REQUEST,
+        usage: Notifications.AndroidAudioUsage.NOTIFICATION_RINGTONE,
         contentType: Notifications.AndroidAudioContentType.SONIFICATION,
       },
     });
 
-    // 2. Default channel for messages, general prayers and updates
+    // 2. High-priority channel for incoming pastoral chat requests with ringtone & long vibration
+    await Notifications.setNotificationChannelAsync('chat-requests-v1', {
+      name: 'Solicitudes de Chat Pastoral',
+      description: 'Alertas de solicitudes de chat confidencial de guardia en tiempo real',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: LONG_CALL_VIBRATION_PATTERN,
+      enableVibrate: true,
+      enableLights: true,
+      lightColor: '#0C7AE0',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+      sound: 'incoming_call',
+      audioAttributes: {
+        usage: Notifications.AndroidAudioUsage.NOTIFICATION_RINGTONE,
+        contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+      },
+    });
+
+    // 3. Default channel for messages, general prayers and updates
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Notificaciones Generales',
       description: 'Avisos del muro de oración, contenidos y bitácoras',
@@ -68,11 +102,30 @@ export async function setupNotificationChannels(): Promise<void> {
       sound: 'default',
     });
 
-    // 3. Interactive Notification Category with Action Buttons (Atender / Rechazar)
+    // 4. Interactive Notification Category for Video Calls (Atender / Rechazar)
     await Notifications.setNotificationCategoryAsync('incoming-call', [
       {
         identifier: 'ACCEPT',
         buttonTitle: '🟢 Atender',
+        options: {
+          opensAppToForeground: true,
+        },
+      },
+      {
+        identifier: 'REJECT',
+        buttonTitle: '🔴 Rechazar',
+        options: {
+          isDestructive: true,
+          opensAppToForeground: false,
+        },
+      },
+    ]);
+
+    // 5. Interactive Notification Category for Pastoral Chat Requests (Responder Chat / Rechazar)
+    await Notifications.setNotificationCategoryAsync('incoming-chat', [
+      {
+        identifier: 'ACCEPT',
+        buttonTitle: '💬 Responder Chat',
         options: {
           opensAppToForeground: true,
         },
@@ -203,7 +256,16 @@ export function stopIncomingCallVibration(): void {
 export async function dismissIncomingCallNotifications(): Promise<void> {
   stopIncomingCallVibration();
   try {
-    await Notifications.dismissAllNotificationsAsync();
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    const callNotificationIds = presented
+      .filter((n) => n.request.identifier !== 'perlita-lockscreen-active')
+      .map((n) => n.request.identifier);
+
+    await Promise.all(
+      callNotificationIds.map((id) =>
+        Notifications.dismissNotificationAsync(id).catch(() => {})
+      )
+    );
   } catch (err) {
     console.warn('[Notifications] Failed to dismiss notifications:', err);
   }

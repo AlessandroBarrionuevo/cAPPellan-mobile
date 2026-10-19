@@ -27,6 +27,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "allowBackup": false,
       "package": "com.cappellan.cepdlc",
       "googleServicesFile": "./google-services.json",
       "permissions": [
@@ -42,7 +43,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_PHONE_CALL"
       ],
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -54,7 +55,30 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#0B192C"
+          "color": "#0B192C",
+          "sounds": [
+            "./assets/sounds/incoming_call.wav"
+          ]
+        }
+      ],
+      "expo-secure-store",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "PerlitaWidget",
+              "label": "Perlita del Día",
+              "description": "Versículo bíblico y reflexión táctica diaria de guardia",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "previewImage": "./assets/icon.png",
+              "updatePeriodMillis": 3600000
+            }
+          ]
         }
       ]
     ],

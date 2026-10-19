@@ -20,6 +20,9 @@ import {
   X,
   ChevronRight,
   ExternalLink,
+  AlertCircle,
+  HeartHandshake,
+  RotateCcw,
 } from 'lucide-react-native';
 
 const INSTAGRAM_GRADIENT = {
@@ -184,15 +187,59 @@ export interface NoChaplainAvailableModalProps {
   visible: boolean;
   onClose: () => void;
   onRetry?: () => void;
+  onNavigateToPrayers?: () => void;
+  endReason?: 'MISSED_TIMEOUT' | 'CHAPLAIN_BUSY' | 'CANCELLED_BY_CALLER' | 'COMPLETED' | string | null;
+  sessionType?: 'VIDEO' | 'CHAT' | null;
 }
 
 export default function NoChaplainAvailableModal({
   visible,
   onClose,
   onRetry,
+  onNavigateToPrayers,
+  endReason,
+  sessionType,
 }: NoChaplainAvailableModalProps) {
   const { width } = useWindowDimensions();
   const isTablet = width > 500;
+
+  const isChat = sessionType === 'CHAT';
+  const modalityLabel = isChat ? 'chat pastoral' : 'videollamada pastoral';
+
+  let badgeText = 'GUARDIA EN CURSO';
+  let badgeColor = '#D97706';
+  let badgeBg = '#FEF3C7';
+  let title = 'Capellanes en Atención Activa';
+  let subtitle =
+    'En este momento todos nuestros capellanes de turno se encuentran brindando contención en servicio operativo.';
+  let subNote =
+    'Tu bienestar y el de tus camaradas es prioridad. Si te encontrás en una situación crítica o urgente, podés comunicarte inmediatamente a través de las siguientes líneas de guardia:';
+
+  if (endReason === 'MISSED_TIMEOUT') {
+    badgeText = 'TIEMPO DE ESPERA AGOTADO (45s)';
+    badgeColor = '#DC2626';
+    badgeBg = '#FEF2F2';
+    title = 'Sin Respuesta en la Guardia';
+    subtitle = `Transcurrieron los 45 segundos de guardia sin que un capellán en servicio pudiera tomar tu solicitud de ${modalityLabel}.`;
+    subNote =
+      'Tu necesidad es prioritaria. Podés reintentar la solicitud ahora mismo, dejar tu pedido confidencial en el Muro de Oración para intercesión o llamar a las líneas de emergencia:';
+  } else if (endReason === 'CHAPLAIN_BUSY') {
+    badgeText = 'CAPELLÁN EN ATENCIÓN ACTIVA';
+    badgeColor = '#D97706';
+    badgeBg = '#FEF3C7';
+    title = 'Capellanía Ocupada';
+    subtitle = `El capellán de guardia se encuentra abocado a otra urgencia pastoral o postergó la solicitud de ${modalityLabel}.`;
+    subNote =
+      'Te sugerimos reintentar en unos minutos, dejar una petición confidencial en el Muro de Oración o contactar las líneas directas:';
+  } else if (endReason === 'CANCELLED_BY_CALLER') {
+    badgeText = 'SOLICITUD CANCELADA';
+    badgeColor = '#64748B';
+    badgeBg = '#F1F5F9';
+    title = 'Solicitud Cancelada';
+    subtitle = `Has cancelado la solicitud de ${modalityLabel}.`;
+    subNote =
+      'Cuando desees comunicarte nuevamente, podés iniciar una nueva solicitud de guardia o utilizar los siguientes canales:';
+  }
 
   const handleCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`).catch((err) => {
@@ -224,9 +271,9 @@ export default function NoChaplainAvailableModal({
         <View style={[styles.modalCard, isTablet && styles.tabletCard]}>
           {/* Top Bar with Close Button */}
           <View style={styles.topBar}>
-            <View style={styles.badgeIndicator}>
-              <Clock size={14} color="#D97706" />
-              <Text style={styles.badgeIndicatorText}>GUARDIA EN CURSO</Text>
+            <View style={[styles.badgeIndicator, { backgroundColor: badgeBg }]}>
+              <Clock size={14} color={badgeColor} />
+              <Text style={[styles.badgeIndicatorText, { color: badgeColor }]}>{badgeText}</Text>
             </View>
             <TouchableOpacity
               style={styles.closeBtn}
@@ -239,13 +286,9 @@ export default function NoChaplainAvailableModal({
 
           {/* Main Visual Banner (Comforting, Non-aggressive) */}
           <View style={styles.bannerContainer}>
-            <Text style={styles.title}>Capellanes en Atención Activa</Text>
-            <Text style={styles.subtitle}>
-              En este momento todos nuestros capellanes de turno se encuentran brindando contención en servicio operativo.
-            </Text>
-            <Text style={styles.subNote}>
-              Tu bienestar y el de tus camaradas es prioridad. Si te encontrás en una situación crítica o urgente, podés comunicarte inmediatamente a través de las siguientes líneas de guardia:
-            </Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text style={styles.subNote}>{subNote}</Text>
           </View>
 
           {/* Contact / Emergency Channels */}
@@ -296,26 +339,43 @@ export default function NoChaplainAvailableModal({
           </ScrollView>
 
           {/* Footer Actions */}
-          <View style={styles.footerRow}>
-            {onRetry && (
+          <View style={styles.footerCol}>
+            {onNavigateToPrayers && (
               <TouchableOpacity
-                style={styles.retryButton}
+                style={styles.prayerWallBtn}
                 onPress={() => {
                   onClose();
-                  onRetry();
+                  onNavigateToPrayers();
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.retryButtonText}>Volver a intentar</Text>
+                <HeartHandshake size={16} color="#0C7AE0" strokeWidth={2.2} />
+                <Text style={styles.prayerWallBtnText}>Dejar Petición en Muro de Oración</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.dismissButton}
-              onPress={onClose}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.dismissButtonText}>Entendido</Text>
-            </TouchableOpacity>
+
+            <View style={styles.footerRow}>
+              {onRetry && (
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => {
+                    onClose();
+                    onRetry();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <RotateCcw size={14} color="#334155" style={{ marginRight: 6 }} />
+                  <Text style={styles.retryButtonText}>Volver a intentar</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.dismissButton}
+                onPress={onClose}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dismissButtonText}>Entendido</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -539,10 +599,29 @@ const styles = StyleSheet.create({
     color: '#E0F2FE',
     lineHeight: 16,
   },
+  footerCol: {
+    gap: 8,
+    paddingTop: 8,
+  },
+  prayerWallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  prayerWallBtnText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13.5,
+    color: '#0C7AE0',
+  },
   footerRow: {
     flexDirection: 'row',
     gap: 10,
-    paddingTop: 8,
   },
   retryButton: {
     flex: 1,

@@ -131,6 +131,7 @@ export default function IncomingSessionModalPreview({
 
   const sessionType: SessionType = session.sessionType || 'VIDEO';
   const isVideo = sessionType === 'VIDEO';
+  const isChat = sessionType === 'CHAT';
   const isTablet = width > 540;
 
   return (
@@ -150,7 +151,9 @@ export default function IncomingSessionModalPreview({
           <View style={styles.alertHeader}>
             <View style={styles.beaconBadge}>
               <View style={styles.beaconDot} />
-              <Text style={styles.beaconText}>SOLICITUD ENTRANTE DE GUARDIA</Text>
+              <Text style={styles.beaconText}>
+                {isChat ? 'SOLICITUD ENTRANTE DE CHAT' : 'SOLICITUD ENTRANTE DE GUARDIA'}
+              </Text>
             </View>
             <View style={styles.timerBadge}>
               <Clock size={12} color="#0C7AE0" />
@@ -193,11 +196,17 @@ export default function IncomingSessionModalPreview({
               <View
                 style={[
                   styles.mainIconCircle,
-                  isVideo ? styles.iconCircleVideo : styles.iconCircleVoice,
+                  isVideo
+                    ? styles.iconCircleVideo
+                    : isChat
+                    ? styles.iconCircleChat
+                    : styles.iconCircleVoice,
                 ]}
               >
                 {isVideo ? (
                   <Video size={32} color="#FFFFFF" strokeWidth={2.4} />
+                ) : isChat ? (
+                  <MessageSquare size={30} color="#FFFFFF" strokeWidth={2.4} />
                 ) : (
                   <Phone size={32} color="#FFFFFF" strokeWidth={2.4} />
                 )}
@@ -205,12 +214,16 @@ export default function IncomingSessionModalPreview({
             </View>
 
             <Text style={styles.title}>
-              {session.callerName || 'Consulta de Guardia en Espera'}
+              {session.callerName || (isChat ? 'Solicitud de Chat de Guardia' : 'Consulta de Guardia en Espera')}
             </Text>
 
             <View style={styles.modalityTag}>
               <Text style={styles.modalityTagText}>
-                {isVideo ? 'Videollamada Pastoral Cifrada' : 'Llamada de Voz Directa'}
+                {isVideo
+                  ? 'Videollamada Pastoral Cifrada'
+                  : isChat
+                  ? 'Chat Pastoral Confidencial'
+                  : 'Llamada de Voz Directa'}
               </Text>
             </View>
 
@@ -291,17 +304,26 @@ export default function IncomingSessionModalPreview({
           {/* Shaped Action Buttons */}
           <View style={styles.actionsFooter}>
             <TouchableOpacity
-              style={styles.acceptShapedButton}
+              style={[
+                styles.acceptShapedButton,
+                isChat && styles.acceptChatButton,
+              ]}
               onPress={() => onAccept(sessionType)}
               activeOpacity={0.88}
             >
               {isVideo ? (
                 <Video size={20} color="#FFFFFF" strokeWidth={2.4} />
+              ) : isChat ? (
+                <MessageSquare size={20} color="#FFFFFF" strokeWidth={2.4} />
               ) : (
                 <Phone size={20} color="#FFFFFF" strokeWidth={2.4} />
               )}
               <Text style={styles.acceptButtonText}>
-                {isVideo ? 'Atender Videollamada' : 'Atender Llamada'}
+                {isVideo
+                  ? 'Atender Videollamada'
+                  : isChat
+                  ? 'Atender Chat Pastoral'
+                  : 'Atender Llamada'}
               </Text>
             </TouchableOpacity>
 
@@ -448,6 +470,9 @@ const styles = StyleSheet.create({
   iconCircleVideo: {
     backgroundColor: '#0C7AE0',
   },
+  iconCircleChat: {
+    backgroundColor: '#0284C7',
+  },
   iconCircleVoice: {
     backgroundColor: '#0284C7',
   },
@@ -579,6 +604,9 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
     }),
+  },
+  acceptChatButton: {
+    backgroundColor: '#0284C7',
   },
   acceptButtonText: {
     fontFamily: Theme.fonts.headlineBold,

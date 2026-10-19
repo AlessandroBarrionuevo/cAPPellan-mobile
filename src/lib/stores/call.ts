@@ -1,7 +1,7 @@
 import { createStore } from './createStore';
 import { request, ApiError, setClientToken, getClientToken } from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
-import type { CallResponse, SessionType, CallIntake, CallRequestPayload } from '../../types/api';
+import type { CallResponse, SessionType, CallIntake, CallRequestPayload, EndReason } from '../../types/api';
 
 export type CallStatus = 'IDLE' | 'REQUESTING' | 'WAITING' | 'IN_PROGRESS' | 'ENDED';
 
@@ -10,6 +10,8 @@ let heartbeatTimer: any = null;
 interface CallState {
   currentSession: CallResponse | null;
   callStatus: CallStatus;
+  lastEndReason: EndReason | string | null;
+  lastEndedSessionType: SessionType | null;
   error: string | null;
 
   requestCall: (type?: SessionType, intake?: CallIntake) => Promise<void>;
@@ -18,6 +20,8 @@ interface CallState {
   startHeartbeat: (sessionId: number) => void;
   stopHeartbeat: () => void;
   setCallStatus: (status: CallStatus) => void;
+  setEndReason: (reason: EndReason | string | null, sessionType?: SessionType | null) => void;
+  clearEndReason: () => void;
   resetCall: () => void;
   setSession: (session: CallResponse | null) => void;
 }
@@ -25,6 +29,8 @@ interface CallState {
 export const useCallStore = createStore<CallState>((set, get) => ({
   currentSession: null,
   callStatus: 'IDLE',
+  lastEndReason: null,
+  lastEndedSessionType: null,
   error: null,
 
   requestCall: async (type: SessionType = 'VIDEO', intake?: CallIntake) => {
@@ -162,6 +168,20 @@ export const useCallStore = createStore<CallState>((set, get) => ({
 
   setCallStatus: (status: CallStatus) => {
     set({ callStatus: status });
+  },
+
+  setEndReason: (reason: EndReason | string | null, sessionType?: SessionType | null) => {
+    set({
+      lastEndReason: reason,
+      lastEndedSessionType: sessionType || get().currentSession?.sessionType || null,
+    });
+  },
+
+  clearEndReason: () => {
+    set({
+      lastEndReason: null,
+      lastEndedSessionType: null,
+    });
   },
 
   resetCall: () => {

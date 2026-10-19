@@ -127,7 +127,7 @@ export function ChatRoomView({
   // Centralized remote session termination handler (chaplain finishes on Web, or session ended on server)
   const isTerminatedRef = useRef(false);
 
-  const handleRemoteSessionEnded = useCallback(() => {
+  const handleRemoteSessionEnded = useCallback((endReason?: string | null) => {
     if (isTerminatedRef.current) return;
     isTerminatedRef.current = true;
     setSessionStatus('ENDED');
@@ -138,12 +138,27 @@ export function ChatRoomView({
     }
 
     useChaplainStore.getState().clearAssignedCall();
+    useCallStore.getState().setEndReason(endReason || null, 'CHAT');
     useCallStore.getState().resetCall();
 
     if (!isChaplainMode) {
+      let alertTitle = 'Consulta Concluida';
+      let alertMsg = 'La sesión de acompañamiento pastoral ha finalizado.';
+
+      if (endReason === 'MISSED_TIMEOUT') {
+        alertTitle = 'Tiempo de Espera Agotado';
+        alertMsg = 'Transcurrieron los 45 segundos de guardia sin que un capellán en servicio pudiera tomar tu solicitud de chat pastoral.';
+      } else if (endReason === 'CHAPLAIN_BUSY') {
+        alertTitle = 'Capellanía Ocupada';
+        alertMsg = 'El capellán de guardia se encuentra actualmente abocado a otra emergencia pastoral o postergó la atención.';
+      } else if (endReason === 'CANCELLED_BY_CALLER') {
+        alertTitle = 'Solicitud Cancelada';
+        alertMsg = 'Has cancelado la solicitud de chat pastoral.';
+      }
+
       Alert.alert(
-        'Consulta Concluida',
-        'El capellán ha dado por finalizada la sesión de acompañamiento.',
+        alertTitle,
+        alertMsg,
         [
           {
             text: 'Entendido',
@@ -304,7 +319,7 @@ export function ChatRoomView({
     sse.addEventListener('status-change', (data: any) => {
       if (!data) return;
       if (data.status === 'ENDED') {
-        handleRemoteSessionEnded();
+        handleRemoteSessionEnded(data.endReason);
       } else if (data.status === 'IN_PROGRESS') {
         setSessionStatus('IN_PROGRESS');
       }
@@ -319,7 +334,7 @@ export function ChatRoomView({
         const detail = await request<Session>(ENDPOINTS.CALL_DETAIL(sessionId));
         if (detail) {
           if (detail.status === 'ENDED') {
-            handleRemoteSessionEnded();
+            handleRemoteSessionEnded(detail.endReason);
           } else if (detail.status === 'IN_PROGRESS' && sessionStatus === 'WAITING') {
             setSessionStatus('IN_PROGRESS');
           }

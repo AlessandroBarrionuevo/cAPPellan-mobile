@@ -13,6 +13,16 @@ if (Platform.OS !== 'web') {
   }
 }
 
+if (Platform.OS === 'android') {
+  try {
+    const { registerWidgetTaskHandler } = require('react-native-android-widget');
+    const { widgetTaskHandler } = require('./src/widgets/widgetTaskHandler');
+    registerWidgetTaskHandler(widgetTaskHandler);
+  } catch (e) {
+    console.warn('[PerlitaWidget] Native Android widget module is not present in this runtime.');
+  }
+}
+
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
