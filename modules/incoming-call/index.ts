@@ -8,7 +8,18 @@ export interface IncomingCallOptions {
   livekitRoom?: string | null;
 }
 
+export interface InitialCallData {
+  sessionId?: string;
+  callerName?: string;
+  sessionType?: string;
+  token?: string;
+  livekitRoom?: string;
+  action?: string;
+}
+
 interface IncomingCallNativeModule {
+  getInitialCallData(): InitialCallData | null;
+  clearInitialCallData(): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
   displayIncomingCall(options: IncomingCallOptions): boolean;
@@ -18,6 +29,25 @@ interface IncomingCallNativeModule {
 
 const NativeModule: IncomingCallNativeModule | null =
   Platform.OS === 'android' ? requireNativeModule<IncomingCallNativeModule>('IncomingCall') : null;
+
+export function getInitialCallData(): InitialCallData | null {
+  if (Platform.OS !== 'android' || !NativeModule) return null;
+  try {
+    return NativeModule.getInitialCallData() || null;
+  } catch (err) {
+    console.warn('[IncomingCallModule] Failed to get initial call data:', err);
+    return null;
+  }
+}
+
+export function clearInitialCallData(): void {
+  if (Platform.OS !== 'android' || !NativeModule) return;
+  try {
+    NativeModule.clearInitialCallData();
+  } catch (err) {
+    console.warn('[IncomingCallModule] Failed to clear initial call data:', err);
+  }
+}
 
 export function canUseFullScreenIntent(): boolean {
   if (Platform.OS !== 'android' || !NativeModule) return true;

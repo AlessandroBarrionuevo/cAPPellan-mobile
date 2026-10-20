@@ -21,6 +21,28 @@ class IncomingCallModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("IncomingCall")
 
+    Function("getInitialCallData") {
+      val intent = appContext.currentActivity?.intent ?: return@Function null
+      val type = intent.getStringExtra("type") ?: return@Function null
+      if (type != "INCOMING_CALL") return@Function null
+
+      val data = mapOf(
+        "sessionId" to intent.getStringExtra("sessionId"),
+        "callerName" to intent.getStringExtra("callerName"),
+        "sessionType" to intent.getStringExtra("sessionType"),
+        "token" to intent.getStringExtra("token"),
+        "livekitRoom" to intent.getStringExtra("livekitRoom"),
+        "action" to intent.getStringExtra("action")
+      )
+      // Clear the type so subsequent checks do not re-trigger
+      intent.removeExtra("type")
+      data
+    }
+
+    Function("clearInitialCallData") {
+      appContext.currentActivity?.intent?.removeExtra("type")
+    }
+
     Function("canUseFullScreenIntent") {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, AppState } from 'react-native';
 import { SafeAppProvider } from './src/lib/safeArea';
 import { useFonts } from 'expo-font';
 import { IosevkaCharon_500Medium, IosevkaCharon_700Bold } from '@expo-google-fonts/iosevka-charon';
@@ -35,6 +35,7 @@ import {
   displayNativeIncomingCall,
   dismissNativeIncomingCall,
   turnScreenOnAndDismissKeyguard,
+  getInitialCallData,
 } from './modules/incoming-call';
 import * as Notifications from 'expo-notifications';
 
@@ -265,6 +266,69 @@ export default function App() {
       }
     };
 
+    // Native Intent check for calls opened via FullScreenIntent / Heads-up notification
+    const checkIncomingCallIntent = async () => {
+      const callData = getInitialCallData();
+      if (!callData || !callData.sessionId) return;
+
+      const isChat = callData.sessionType === 'CHAT';
+      const assigned: CallResponse = {
+        sessionId: Number(callData.sessionId),
+        sessionType: (callData.sessionType as any) || 'VIDEO',
+        livekitRoomName: callData.livekitRoom,
+        token: callData.token,
+        clientToken: callData.token,
+        callerName: callData.callerName || (isChat ? 'Solicitud de Chat Pastoral' : 'Consulta de Guardia'),
+      };
+
+      if (callData.action === 'ACCEPT') {
+        stopIncomingCallVibration();
+        dismissIncomingCallNotifications();
+        dismissNativeIncomingCall(assigned.sessionId);
+        try {
+          const acceptResponse = await request<CallResponse>(
+            ENDPOINTS.CALL_ACCEPT(assigned.sessionId),
+            {
+              method: 'POST',
+              headers: { 'X-Device-Channel': 'MOBILE' },
+            }
+          );
+          const finalSession = acceptResponse || assigned;
+          useChaplainStore.getState().setAssignedCall(finalSession);
+          useCallStore.getState().setSession(finalSession);
+          if (finalSession.clientToken) {
+            setClientToken(finalSession.clientToken);
+          }
+          setShowIncomingModal(false);
+          if (isChat || finalSession.sessionType === 'CHAT') {
+            setActiveTab('chat');
+          } else {
+            setInCallView(true);
+          }
+          return;
+        } catch (err) {
+          console.warn('[App] Intent direct accept failed:', err);
+        }
+      }
+
+      startIncomingCallVibration();
+      turnScreenOnAndDismissKeyguard();
+      useChaplainStore.getState().setAssignedCall(assigned);
+      useCallStore.getState().setSession(assigned);
+      if (assigned.clientToken) {
+        setClientToken(assigned.clientToken);
+      }
+      setShowIncomingModal(true);
+    };
+
+    checkIncomingCallIntent();
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkIncomingCallIntent();
+      }
+    });
+
     // Handle cold-start notification tap when app was killed
     Notifications.getLastNotificationResponseAsync()
       .then((initialResponse) => {
@@ -277,6 +341,7 @@ export default function App() {
     const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
     return () => {
+      appStateSub.remove();
       receivedSub.remove();
       responseSub.remove();
     };
