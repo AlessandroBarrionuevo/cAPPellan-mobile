@@ -6,7 +6,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Animated,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
+import Svg, {
+  Defs,
+  LinearGradient,
+  Stop,
+  Rect,
+  Circle,
+} from 'react-native-svg';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { InstitutionalEmblem } from '../common';
 import {
@@ -26,6 +35,7 @@ import {
   Lock,
   Plus,
   ArrowRight,
+  ArrowUpRight,
   ChevronRight,
 } from 'lucide-react-native';
 import { request } from '../../lib/api/client';
@@ -70,6 +80,8 @@ export default function DutyConsole({
   hideHeader = false,
   refreshTrigger = 0,
 }: DutyConsoleProps) {
+  const { width } = useWindowDimensions();
+  const [reportsCardWidth, setReportsCardWidth] = useState(0);
   const [internalReports, setInternalReports] = useState<PostCallReport[]>([]);
   const [internalStats, setInternalStats] = useState<ReportStats | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
@@ -179,6 +191,10 @@ export default function DutyConsole({
   const chatCount =
     effectiveStats?.bySessionType?.['CHAT'] ??
     effectiveReports.filter((r) => r.sessionType === 'CHAT').length;
+
+  const latestReport = effectiveReports[0];
+  const reportsCardW = reportsCardWidth || Math.min(width - 32, 420);
+  const reportsCardH = 220;
 
   return (
     <View style={styles.container}>
@@ -418,141 +434,106 @@ export default function DutyConsole({
         </View>
       </View>
 
-      {/* 4. Compact Pastoral Reports Preview (#Sección de Informes) */}
-      <View style={[styles.reportsSection, globalStyles.shadowSoft]}>
-        <View style={styles.reportsHeader}>
-          <View style={styles.reportsTitleRow}>
-            <Text style={styles.reportsTitle}>Informes de guardia</Text>
-            {effectiveReports.length > 0 && (
-              <Text style={styles.reportsSubtitle}>
-                {effectiveReports.length} {effectiveReports.length === 1 ? 'acta registrada' : 'actas registradas'}
-              </Text>
-            )}
-          </View>
-          {onOpenNewReport && (
-            <TouchableOpacity
-              style={styles.newReportSmallBtn}
-              onPress={onOpenNewReport}
-              activeOpacity={0.8}
-            >
-              <Plus size={13} color="#FFFFFF" />
-              <Text style={styles.newReportSmallBtnText}>Nuevo</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+      {/* 4. Compact Pastoral Reports Card (Insurance Card Style) */}
+      <View
+        style={[styles.insuranceCard, globalStyles.shadowSoft]}
+        onLayout={(e) => setReportsCardWidth(e.nativeEvent.layout.width)}
+      >
+        {/* SVG Gradient Background (White to Navy with ambient organic curves) */}
+        <Svg
+          style={StyleSheet.absoluteFill}
+          width={reportsCardW}
+          height={reportsCardH}
+          viewBox={`0 0 ${reportsCardW} ${reportsCardH}`}
+        >
+          <Defs>
+            <LinearGradient id="dutyReportCardGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor="#FFFFFF" />
+              <Stop offset="26%" stopColor="#F8FAFC" />
+              <Stop offset="48%" stopColor="#1E40AF" />
+              <Stop offset="76%" stopColor="#0C2340" />
+              <Stop offset="100%" stopColor="#061224" />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width={reportsCardW} height={reportsCardH} rx="24" fill="url(#dutyReportCardGrad)" />
+          {/* Subtle concentric translucent curves replicating reference image */}
+          <Circle cx={reportsCardW * 0.88} cy={reportsCardH * 0.28} r={95} fill="rgba(255, 255, 255, 0.12)" />
+          <Circle cx={reportsCardW * 0.95} cy={reportsCardH * 0.44} r={65} fill="rgba(255, 255, 255, 0.08)" />
+          <Circle cx={reportsCardW * 0.50} cy={reportsCardH * 0.88} r={135} fill="rgba(255, 255, 255, 0.05)" />
+          <Circle cx={reportsCardW * 0.12} cy={reportsCardH * 0.12} r={65} fill="rgba(255, 255, 255, 0.35)" />
+        </Svg>
 
-        {isLoadingReports && effectiveReports.length === 0 ? (
-          <View style={styles.reportsLoadingBox}>
-            <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
-            <Text style={styles.reportsLoadingText}>Cargando bitácora pastoral...</Text>
-          </View>
-        ) : effectiveReports.length === 0 ? (
-          <View style={styles.emptyReportsBox}>
-            <FileText size={22} color={Theme.colors.outline} />
-            <Text style={styles.emptyReportsTitle}>Sin informes registrados</Text>
-            <Text style={styles.emptyReportsSub}>
-              Luego de atender una llamada o chat pastoral, completá el acta para archivarla en la bitácora.
-            </Text>
-            {onOpenNewReport && (
+        <View style={styles.insuranceCardContent}>
+          {/* Top Row: Emblem + Title & Subtitle + Arrow ↗ Link */}
+          <View style={styles.cardTopRow}>
+            <View style={styles.cardTopLeft}>
+              <View style={styles.cardEmblemBadge}>
+                <ShieldCheck size={20} color="#0C7AE0" strokeWidth={2.4} />
+              </View>
+              <View style={styles.cardTitleCol}>
+                <Text style={styles.cardTitleText}>Informes de Guardia</Text>
+                <Text style={styles.cardSubtitleText}>Libro de Guardia y Asistencia</Text>
+              </View>
+            </View>
+            {onNavigateToInformes && (
               <TouchableOpacity
-                style={styles.emptyCreateBtn}
-                onPress={onOpenNewReport}
-                activeOpacity={0.85}
+                style={styles.cardArrowBtn}
+                onPress={onNavigateToInformes}
+                activeOpacity={0.75}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Plus size={13} color="#FFFFFF" />
-                <Text style={styles.emptyCreateBtnText}>Redactar Primer Informe</Text>
+                <ArrowUpRight size={17} color="#0A192F" strokeWidth={2.4} />
               </TouchableOpacity>
             )}
           </View>
-        ) : (
-          <View style={styles.reportsList}>
-            {effectiveReports.slice(0, 3).map((report) => {
-              const badge = getCategoryBadge(report.category);
-              const dotColor = getSeverityDot(report.severity);
 
-              return (
-                <View key={report.id || report.sessionId} style={styles.dutyReportCard}>
-                  <View style={styles.dutyReportTop}>
-                    <View style={styles.dutyReportDateRow}>
-                      <Text style={styles.dutyReportDate}>
-                        {formatReportDate(report.createdAt)}
-                      </Text>
-                      {report.chaplainUsername && (
-                        <View style={styles.chaplainAuthorBadge}>
-                          <User size={10} color="#0c7ae0" />
-                          <Text style={styles.chaplainAuthorBadgeText} numberOfLines={1}>
-                            Cap. {report.chaplainUsername}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.dutyBadgages}>
-                      <View style={styles.dutyReportMeta}>
-                        <View style={[styles.dutyCategoryBadge, { backgroundColor: badge.bg }]}>
-                          <Text style={[styles.dutyCategoryBadgeText, { color: badge.text }]}>
-                            {badge.label}
-                          </Text>
-                        </View>
-                        {report.sessionType && (
-                          <View style={styles.sessionTypePill}>
-                            {report.sessionType === 'CHAT' ? (
-                              <MessageSquare size={10} color="#505F76" />
-                            ) : (
-                              <Video size={10} color="#505F76" />
-                            )}
-                            <Text style={styles.sessionTypePillText}>
-                              {report.sessionType === 'CHAT' ? 'Chat' : 'Video'}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.severityRow}>
-                        <Text style={styles.severityLabel}>Severidad {report.severity}/5</Text>
-                        <View style={[styles.severityDot, { backgroundColor: dotColor }]} />
-                      </View>
-                    </View>
-                  </View>
-
-                  {report.subject ? (
-                    <Text style={styles.dutyReportSubject} numberOfLines={1}>
-                      {report.subject}
-                    </Text>
-                  ) : null}
-
-                  <Text style={styles.dutyReportSummary} numberOfLines={2}>
-                    {report.summary}
-                  </Text>
-
-                  <View style={styles.dutyReportBottom}>
-                    <View style={styles.guaranteeTag}>
-                      <Lock size={11} color="#9A805B" />
-                      <Text style={styles.guaranteeTagText}>Secreto de Confesión</Text>
-                    </View>
-
-                    <TouchableOpacity
-                      onPress={() => onViewReportDetails && onViewReportDetails(report)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.viewActaBtnText}>Ver acta →</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
+          {/* Middle Row (2 Columns): Titular de Guardia | Total de Actas */}
+          <View style={styles.cardMiddleRow}>
+            <View style={styles.cardMetaColLeft}>
+              <Text style={styles.cardMetaLabel}>TITULAR DE GUARDIA</Text>
+              <Text style={styles.cardMetaValue} numberOfLines={1}>
+                {user ? `Cap. ${user.username}` : 'Capellán de Servicio'}
+              </Text>
+            </View>
+            <View style={styles.cardMetaColRight}>
+              <Text style={[styles.cardMetaLabel, styles.alignRight]}>TOTAL DE ACTAS</Text>
+              <Text style={[styles.cardMetaValue, styles.alignRight]} numberOfLines={1}>
+                {totalReportsCount} {totalReportsCount === 1 ? 'acta' : 'actas'}
+              </Text>
+            </View>
           </View>
-        )}
 
-        {/* Link to Full Informes Screen */}
-        {onNavigateToInformes && (
-          <TouchableOpacity
-            style={styles.viewAllReportsRow}
-            onPress={onNavigateToInformes}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.viewAllReportsText}>Ver todas las actas en bitácora</Text>
-            <ChevronRight size={15} color={Theme.colors.tacticalNavy} />
-          </TouchableOpacity>
-        )}
+          {/* Bottom Row: Último Registro | Pill Button Redactar */}
+          <View style={styles.cardBottomRow}>
+            <TouchableOpacity
+              style={styles.cardMetaColLeft}
+              onPress={() => latestReport && onViewReportDetails && onViewReportDetails(latestReport)}
+              activeOpacity={latestReport && onViewReportDetails ? 0.75 : 1}
+            >
+              <Text style={styles.cardMetaLabel}>ÚLTIMO REGISTRO</Text>
+              <Text style={styles.cardMetaValue} numberOfLines={1}>
+                {latestReport ? formatReportDate(latestReport.createdAt) : 'Sin actas registradas'}
+              </Text>
+              {latestReport?.subject ? (
+                <Text style={styles.cardSubjectSub} numberOfLines={1}>
+                  {latestReport.subject}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+
+            <View style={styles.cardActionCol}>
+              {onOpenNewReport && (
+                <TouchableOpacity
+                  style={styles.cardPillBtn}
+                  onPress={onOpenNewReport}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.cardPillBtnText}>Redactar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
       </View>
 
       {/* 5. Community Prayer Wall Oversight Snippet (#Muro de Oración) */}
@@ -927,6 +908,152 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: Theme.colors.onSurface,
   },
+  // 4. Compact Pastoral Reports Card (Insurance Card Style)
+  insuranceCard: {
+    height: 220,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#0C2340',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0C2340',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.16,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
+  },
+  insuranceCardContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTopLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    paddingRight: 10,
+  },
+  cardEmblemBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.2,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitleCol: {
+    flex: 1,
+  },
+  cardTitleText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 17,
+    color: '#0A192F',
+    letterSpacing: 0.2,
+  },
+  cardSubtitleText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 11.5,
+    color: '#475569',
+    marginTop: 1,
+  },
+  cardArrowBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(12, 122, 224, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardMiddleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginTop: 6,
+  },
+  cardMetaColLeft: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  cardMetaColRight: {
+    alignItems: 'flex-end',
+  },
+  cardMetaLabel: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 10.5,
+    color: 'rgba(255, 255, 255, 0.72)',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  cardMetaValue: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  alignRight: {
+    textAlign: 'right',
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 6,
+  },
+  cardSubjectSub: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 11,
+    color: '#93C5FD',
+    marginTop: 2,
+  },
+  cardActionCol: {
+    marginLeft: 12,
+  },
+  cardPillBtn: {
+    backgroundColor: '#050D1A',
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  cardPillBtnText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13.5,
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
   // 4. Reports Section
   reportsSection: {
     backgroundColor: '#FFFFFF',
@@ -1039,8 +1166,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   dutyReportDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     width: '100%',
   },
