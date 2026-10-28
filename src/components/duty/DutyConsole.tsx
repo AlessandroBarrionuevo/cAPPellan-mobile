@@ -6,7 +6,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Animated,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
+import Svg, {
+  Defs,
+  LinearGradient,
+  Stop,
+  Path,
+} from 'react-native-svg';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { InstitutionalEmblem } from '../common';
 import {
@@ -70,6 +78,8 @@ export default function DutyConsole({
   hideHeader = false,
   refreshTrigger = 0,
 }: DutyConsoleProps) {
+  const { width } = useWindowDimensions();
+  const [notchedCardWidth, setNotchedCardWidth] = useState(0);
   const [internalReports, setInternalReports] = useState<PostCallReport[]>([]);
   const [internalStats, setInternalStats] = useState<ReportStats | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
@@ -161,8 +171,8 @@ export default function DutyConsole({
       const now = new Date();
       const isToday = d.toDateString() === now.toDateString();
       const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      if (isToday) return `Hoy · ${timeStr} hs`;
-      return `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} · ${timeStr} hs`;
+      if (isToday) return `Hoy · ${timeStr}`;
+      return `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} · ${timeStr}`;
     } catch {
       return rawDate;
     }
@@ -179,6 +189,18 @@ export default function DutyConsole({
   const chatCount =
     effectiveStats?.bySessionType?.['CHAT'] ??
     effectiveReports.filter((r) => r.sessionType === 'CHAT').length;
+
+  const latestReport = effectiveReports[0];
+  const nW = notchedCardWidth || Math.min(width - 32, 420);
+  const nH = 180;
+  const notchW = 142;
+  const notchH = 58;
+  const xCut = nW - notchW;
+  const yCut = nH - notchH;
+  const R = 24;
+  const r = 18;
+
+  const notchedCardPath = `M ${R} 0 H ${nW - R} A ${R} ${R} 0 0 1 ${nW} ${R} V ${yCut - R} A ${R} ${R} 0 0 1 ${nW - R} ${yCut} H ${xCut + r} A ${r} ${r} 0 0 0 ${xCut} ${yCut + r} V ${nH - R} A ${R} ${R} 0 0 1 ${xCut - R} ${nH} H ${R} A ${R} ${R} 0 0 1 0 ${nH - R} V ${R} A ${R} ${R} 0 0 1 ${R} 0 Z`;
 
   return (
     <View style={styles.container}>
@@ -366,56 +388,81 @@ export default function DutyConsole({
         </View>
       )}
       */}
-      {/* 3. Operational Real-Time KPIs */}
-      <View style={styles.statsSection}>
-        <View style={styles.statsHeader}>
-          <Text style={styles.statsSectionTitle}>MÉTRICAS OPERATIVAS</Text>
-          <Text style={styles.statsShiftTime}>Bitácora en Tiempo Real</Text>
-        </View>
+      {/* 3. Notched Operational Overview Card (Fintech / Notch Design) */}
+      <View
+        style={[styles.notchedCardWrapper, globalStyles.shadowSoft]}
+        onLayout={(e) => setNotchedCardWidth(e.nativeEvent.layout.width)}
+      >
+        <Svg
+          style={StyleSheet.absoluteFill}
+          width={nW}
+          height={nH}
+          viewBox={`0 0 ${nW} ${nH}`}
+        >
+          <Defs>
+            <LinearGradient id="notchedCardBlueGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor="#0852CD" />
+              <Stop offset="100%" stopColor="#003FA8" />
+            </LinearGradient>
+          </Defs>
+          <Path d={notchedCardPath} fill="url(#notchedCardBlueGrad)" />
+        </Svg>
 
-        <View style={styles.kpiRow}>
-          {/* KPI 1: Total Actas */}
-          <View style={[styles.kpiCard, globalStyles.shadowSoft]}>
-            <View style={styles.kpiTop}>
-              <FileCheck size={15} color={Theme.colors.tacticalNavy} />
-              <View style={styles.kpiBadgeGreen}>
-                <Text style={styles.kpiBadgeGreenText}>Registradas</Text>
-              </View>
-            </View>
-            <Text style={styles.kpiValue}>{totalReportsCount}</Text>
-            <Text style={styles.kpiLabel} numberOfLines={1}>Total Actas</Text>
-          </View>
-
-          {/* KPI 2: Casos Críticos */}
-          <View style={[styles.kpiCard, globalStyles.shadowSoft]}>
-            <View style={styles.kpiTop}>
-              <ShieldAlert size={15} color="#DC2626" />
-              <View style={[styles.kpiBadgeNeutral, { backgroundColor: '#FEE2E2' }]}>
-                <Text style={[styles.kpiBadgeNeutralText, { color: '#B91C1C' }]}>Sev. ≥ 4</Text>
-              </View>
-            </View>
-            <Text style={[styles.kpiValue, criticalAlertsCount > 0 && { color: '#DC2626' }]}>
-              {criticalAlertsCount}
+        {/* Top Content: Primary Metric + Subtitle & Icon */}
+        <View style={styles.notchedCardTop}>
+          <View style={styles.notchedCardHeadlineCol}>
+            <Text style={styles.notchedCardPrimaryValue}>
+              {totalReportsCount} {totalReportsCount === 1 ? 'Acta' : 'Actas'}
             </Text>
-            <Text style={styles.kpiLabel} numberOfLines={1}>Casos Críticos</Text>
+            <Text style={styles.notchedCardSubtitle}>
+              {criticalAlertsCount > 0 ? `${criticalAlertsCount} críticas · ` : 'Al día · '}
+              {videoCount} Video · {chatCount} Chat
+            </Text>
           </View>
-
-          {/* KPI 3: Desglose Canales */}
-          <View style={[styles.kpiCard, globalStyles.shadowSoft]}>
-            <View style={styles.kpiTop}>
-              <Activity size={15} color="#059669" />
-              <View style={styles.kpiBadgeGreen}>
-                <Text style={styles.kpiBadgeGreenText}>Canales</Text>
-              </View>
-            </View>
-            <View style={styles.kpiLeyend}>
-              <Text style={styles.kpiValue}>
-                {videoCount}V · {chatCount}C
-              </Text>
-              <Text style={styles.kpiLabel} numberOfLines={1}>Video / Chat</Text>
-            </View>
+          <View style={styles.notchedCardTopIconBadge}>
+            <Radio size={16} color="rgba(255, 255, 255, 0.85)" />
           </View>
         </View>
+
+        {/* Bottom Left: Metadata Columns (Titular & Último Registro) */}
+        <View style={[styles.notchedCardBottomLeft, { width: xCut - 24 }]}>
+          <View style={styles.notchedMetaCol}>
+            <Text style={styles.notchedMetaLabel}>TITULAR</Text>
+            <Text style={styles.notchedMetaValue} numberOfLines={1}>
+              {user ? `Cap. ${user.username}` : 'Capellán'}
+            </Text>
+          </View>
+          <View style={styles.notchedMetaCol}>
+            <Text style={styles.notchedMetaLabel}>ÚLTIMO</Text>
+            <Text style={styles.notchedMetaValue} numberOfLines={1}>
+              {latestReport ? formatReportDate(latestReport.createdAt) : (isOnline ? 'En guardia' : 'Fuera turno')}
+            </Text>
+          </View>
+        </View>
+
+        {/* Bottom Right: Docked Pill Button nested inside the Cutout Notch */}
+        {onOpenNewReport && (
+          <View
+            style={[
+              styles.notchedButtonDock,
+              {
+                left: xCut + 6,
+                top: yCut + 6,
+                width: notchW - 8,
+                height: notchH - 8,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.notchedPillBtn}
+              onPress={onOpenNewReport}
+              activeOpacity={0.85}
+            >
+              <Plus size={14} color="#FFFFFF" strokeWidth={2.4} />
+              <Text style={styles.notchedPillBtnText}>Redactar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* 4. Compact Pastoral Reports Preview (#Sección de Informes) */}
@@ -477,16 +524,6 @@ export default function DutyConsole({
                       <Text style={styles.dutyReportDate}>
                         {formatReportDate(report.createdAt)}
                       </Text>
-                      {report.chaplainUsername && (
-                        <View style={styles.chaplainAuthorBadge}>
-                          <User size={10} color="#0c7ae0" />
-                          <Text style={styles.chaplainAuthorBadgeText} numberOfLines={1}>
-                            Cap. {report.chaplainUsername}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.dutyBadgages}>
                       <View style={styles.dutyReportMeta}>
                         <View style={[styles.dutyCategoryBadge, { backgroundColor: badge.bg }]}>
                           <Text style={[styles.dutyCategoryBadgeText, { color: badge.text }]}>
@@ -506,10 +543,18 @@ export default function DutyConsole({
                           </View>
                         )}
                       </View>
-                      <View style={styles.severityRow}>
-                        <Text style={styles.severityLabel}>Severidad {report.severity}/5</Text>
-                        <View style={[styles.severityDot, { backgroundColor: dotColor }]} />
-                      </View>
+                      
+                    </View>
+                    <View style={styles.dutyBadgages}>
+                      {report.chaplainUsername && (
+                        <View style={styles.chaplainAuthorBadge}>
+                          <User size={10} color="#0c7ae0" />
+                          <Text style={styles.chaplainAuthorBadgeText} numberOfLines={1}>
+                            {report.chaplainUsername}
+                          </Text>
+                        </View>
+                      )}
+                      
                     </View>
                   </View>
 
@@ -525,8 +570,10 @@ export default function DutyConsole({
 
                   <View style={styles.dutyReportBottom}>
                     <View style={styles.guaranteeTag}>
-                      <Lock size={11} color="#9A805B" />
-                      <Text style={styles.guaranteeTagText}>Secreto de Confesión</Text>
+                      <View style={styles.severityRow}>
+                        <Text style={styles.severityLabel}>Severidad {report.severity}/5</Text>
+                        <View style={[styles.severityDot, { backgroundColor: dotColor }]} />
+                      </View>
                     </View>
 
                     <TouchableOpacity
@@ -843,6 +890,116 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: Theme.colors.outline,
   },
+  // 3. Notched Operational Overview Card (Fintech / Notch Design)
+  notchedCardWrapper: {
+    height: 180,
+    width: '100%',
+    position: 'relative',
+    marginVertical: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#003FA8',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
+  },
+  notchedCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    zIndex: 2,
+  },
+  notchedCardHeadlineCol: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  notchedCardPrimaryValue: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 24,
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  notchedCardSubtitle: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.72)',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  notchedCardTopIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notchedCardBottomLeft: {
+    position: 'absolute',
+    left: 20,
+    bottom: 16,
+    flexDirection: 'row',
+    gap: 16,
+    zIndex: 2,
+  },
+  notchedMetaCol: {
+    flex: 1,
+  },
+  notchedMetaLabel: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.65)',
+    letterSpacing: 0.6,
+    marginBottom: 3,
+  },
+  notchedMetaValue: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13.5,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  notchedButtonDock: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  notchedPillBtn: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#161616',
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  notchedPillBtnText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
   // 3. Shift KPIs
   statsSection: {
     marginTop: 2,
@@ -1026,11 +1183,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   dutyReportCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: Theme.roundness.md,
+    backgroundColor: '#FFFFFF',
     padding: 12,
-    borderWidth: 1,
-    borderColor: '#EAEAEA',
+    
   },
   dutyReportTop: {
     flexDirection: 'column',
@@ -1134,8 +1289,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#EAEAEA',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   guaranteeTag: {
     flexDirection: 'row',
