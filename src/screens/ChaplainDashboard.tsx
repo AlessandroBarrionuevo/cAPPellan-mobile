@@ -48,6 +48,7 @@ export default function ChaplainDashboard({
   const [isToggling, setIsToggling] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const status = useChaplainStore((state) => state.status);
   const toggleStatus = useChaplainStore((state) => state.toggleStatus);
@@ -89,8 +90,13 @@ export default function ChaplainDashboard({
           }
         );
         if (refreshed) {
-          setAssignedCall(refreshed);
-          useCallStore.getState().setSession(refreshed);
+          const merged: CallResponse = {
+            ...assignedCall,
+            ...refreshed,
+            callerName: refreshed.callerName || assignedCall.callerName,
+          };
+          setAssignedCall(merged);
+          useCallStore.getState().setSession(merged);
         }
       } catch (err: any) {
         console.warn('[ChaplainDashboard] Error accepting assigned call:', err);
@@ -134,23 +140,24 @@ export default function ChaplainDashboard({
           user={user}
           hideHeader={true}
           isOnline={status === 'ONLINE'}
-        isToggling={isToggling}
-        onToggleOnline={handleToggle}
-        incomingCall={assignedCall}
-        onAcceptCall={handleAcceptCall}
-        onOpenNewReport={() => {
-          setSelectedSessionId(lastEndedSessionId || 0);
-          setShowReportModal(true);
-        }}
-        onNavigateToInformes={onNavigateToInformes}
-        onNavigatePrayerWall={onNavigatePrayerWall}
-        onViewReportDetails={(report: PostCallReport) => {
-          Alert.alert(
-            `Acta #${report.id || report.sessionId}`,
-            `Asunto: ${report.subject}\nSeveridad: ${report.severity}/5\n\nSíntesis:\n${report.summary}`
-          );
-        }}
-      />
+          isToggling={isToggling}
+          onToggleOnline={handleToggle}
+          incomingCall={assignedCall}
+          onAcceptCall={handleAcceptCall}
+          onOpenNewReport={() => {
+            setSelectedSessionId(lastEndedSessionId || 0);
+            setShowReportModal(true);
+          }}
+          onNavigateToInformes={onNavigateToInformes}
+          onNavigatePrayerWall={onNavigatePrayerWall}
+          refreshTrigger={refreshTrigger}
+          onViewReportDetails={(report: PostCallReport) => {
+            Alert.alert(
+              `Acta #${report.id || report.sessionId}: ${report.subject}`,
+              `Capellán: ${report.chaplainUsername || (user?.username ? `Cap. ${user.username}` : 'Servicio Pastoral')}\nSeveridad: ${report.severity}/5\nCategoría: ${report.category}\n\nSíntesis:\n${report.summary}`
+            );
+          }}
+        />
 
       {/* 2. SHARED DASHBOARD WIDGETS (Perlita, Muro de Oración, Contenidos, Roster, Confidencialidad) */}
       <View style={styles.sharedWidgetsWrapper}>
@@ -178,6 +185,7 @@ export default function ChaplainDashboard({
           setShowReportModal(false);
           setSelectedSessionId(null);
           onClearEndedSession();
+          setRefreshTrigger((prev) => prev + 1);
           Alert.alert(
             'Acta Asentada con Éxito',
             'El informe pastoral ha sido registrado y preservado bajo resguardo canónico inviolable.'

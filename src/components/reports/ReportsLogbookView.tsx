@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -61,44 +61,24 @@ export function ReportsLogbookView({
 
   const isTablet = width > 500;
 
-  // Mock initial reports if backend hasn't populated any yet, or fetch if available
-  useEffect(() => {
-    // Initial sample reports for realistic tactical display
-    const sampleReports: PostCallReport[] = [
-      {
-        id: 101,
-        sessionId: 88,
-        subject: 'Acompañamiento por estrés operativo y retorno',
-        category: 'EMOTIONAL_CRISIS',
-        severity: 3,
-        summary:
-          'Se brindó contención pastoral a oficial en retorno de despliegue fronterizo. Manifiesta agotamiento y dificultad para descansar. Se compartió lectura de Salmo 91 y oración por templanza.',
-        createdAt: '2026-09-08T14:30:00Z',
-      },
-      {
-        id: 102,
-        sessionId: 91,
-        subject: 'Contención por duelo familiar en servicio',
-        category: 'SPIRITUAL_COUNSELING',
-        severity: 2,
-        summary:
-          'Camarada solicita orientación tras pérdida de un progenitor. Se sostuvo diálogo reflexivo bajo secreto pastoral y se coordinó seguimiento espiritual discreto.',
-        createdAt: '2026-09-07T10:15:00Z',
-      },
-      {
-        id: 103,
-        sessionId: 95,
-        subject: 'Intercesión por salud de hijo en terapia',
-        category: 'PRAYER_REQUEST',
-        severity: 4,
-        summary:
-          'Petición urgente de cobertura espiritual por situación de salud crítica de hijo menor. Se oró en conjunto durante llamada y se derivó intención al Muro de Oración anónimo.',
-        createdAt: '2026-09-06T21:40:00Z',
-      },
-    ];
-
-    setReports(sampleReports);
+  // Load dynamic reports from backend API
+  const loadReports = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await request<PostCallReport[]>(ENDPOINTS.REPORTS);
+      if (Array.isArray(data)) {
+        setReports(data);
+      }
+    } catch (err) {
+      console.warn('[ReportsLogbookView] Error loading reports from backend:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
 
   // Filtered reports
   const filteredReports = useMemo(() => {
@@ -114,6 +94,7 @@ export function ReportsLogbookView({
     if (newReport) {
       setReports((prev) => [newReport, ...prev]);
     }
+    loadReports();
     Alert.alert('Acta Guardada', 'El informe pastoral ha sido sellado y archivado en la bitácora.');
   };
 
@@ -312,9 +293,15 @@ export function ReportsLogbookView({
         ListHeaderComponent={renderHeader}
         contentContainerStyle={[styles.listContent, isTablet && styles.tabletContent]}
         showsVerticalScrollIndicator={false}
+        refreshing={isLoading}
+        onRefresh={loadReports}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No hay informes con este filtro.</Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} style={{ marginTop: 20 }} />
+            ) : (
+              <Text style={styles.emptyText}>No hay informes con este filtro.</Text>
+            )}
           </View>
         }
       />

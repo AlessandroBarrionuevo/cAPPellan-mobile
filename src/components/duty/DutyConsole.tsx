@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,11 +19,18 @@ import {
   Radio,
   WifiOff,
   ShieldCheck,
+  ShieldAlert,
+  FileCheck,
+  Activity,
+  FileText,
+  Lock,
   Plus,
   ArrowRight,
   ChevronRight,
 } from 'lucide-react-native';
-import type { CallResponse, SessionType, AuthUser, PostCallReport } from '../../types/api';
+import { request } from '../../lib/api/client';
+import { ENDPOINTS } from '../../lib/api/endpoints';
+import type { CallResponse, SessionType, AuthUser, PostCallReport, ReportStats } from '../../types/api';
 import ChaplainDutyCardBanner from './ChaplainDutyCardBanner';
 
 export interface DutyConsoleProps {
@@ -37,37 +44,15 @@ export interface DutyConsoleProps {
   onNavigateToInformes?: () => void;
   onNavigatePrayerWall?: () => void;
   onViewReportDetails?: (report: PostCallReport) => void;
-  stats?: {
+  stats?: ReportStats | {
     servedToday?: number;
     listeningHours?: string;
     avgResponseTime?: string;
-  };
+  } | null;
+  reports?: PostCallReport[];
   hideHeader?: boolean;
+  refreshTrigger?: number;
 }
-
-// Sample recent acts for the duty overview
-const RECENT_DUTY_REPORTS: PostCallReport[] = [
-  {
-    id: 101,
-    sessionId: 88,
-    subject: 'Duelo Moral y Retorno de Patrulla',
-    category: 'EMOTIONAL_CRISIS',
-    severity: 3,
-    summary:
-      'Acompañamiento a oficial de servicio en zona de frontera. Dificultad para conciliar deber operativo con angustia familiar. Se brindó contención y oración por templanza.',
-    createdAt: 'Hoy · 08:35 hs',
-  },
-  {
-    id: 102,
-    sessionId: 91,
-    subject: 'Estrés Operativo y Guardia Nocturna',
-    category: 'SPIRITUAL_COUNSELING',
-    severity: 2,
-    summary:
-      'Reintegro de patrulla nocturna. Ejercicios de respiración y lectura del Salmo 91. Evolución serena y templanza restaurada bajo secreto de confesión.',
-    createdAt: 'Ayer · 19:10 hs',
-  },
-];
 
 export default function DutyConsole({
   user,
@@ -80,13 +65,45 @@ export default function DutyConsole({
   onNavigateToInformes,
   onNavigatePrayerWall,
   onViewReportDetails,
-  stats = {
-    servedToday: 4,
-    listeningHours: '5.2h',
-    avgResponseTime: '< 28s',
-  },
+  stats,
+  reports,
   hideHeader = false,
+  refreshTrigger = 0,
 }: DutyConsoleProps) {
+  const [internalReports, setInternalReports] = useState<PostCallReport[]>([]);
+  const [internalStats, setInternalStats] = useState<ReportStats | null>(null);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+
+  // Dynamic fetch of real reports and real stats from backend
+  const loadDutyData = useCallback(async () => {
+    setIsLoadingReports(true);
+    try {
+      const reportsData = await request<PostCallReport[]>(ENDPOINTS.REPORTS);
+      if (Array.isArray(reportsData)) {
+        setInternalReports(reportsData);
+      }
+    } catch (err) {
+      console.warn('[DutyConsole] Error fetching reports:', err);
+    }
+
+    try {
+      const statsData = await request<ReportStats>(ENDPOINTS.REPORT_STATS);
+      if (statsData) {
+        setInternalStats(statsData);
+      }
+    } catch (err) {
+      console.warn('[DutyConsole] Error fetching stats:', err);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDutyData();
+  }, [loadDutyData, refreshTrigger]);
+
+  const effectiveReports = reports ?? internalReports;
+  const effectiveStats = (stats && 'totalReports' in stats) ? (stats as ReportStats) : internalStats;
   // Pulse animation for online indicator & incoming alert
   const [pulseAnim] = useState(new Animated.Value(1));
 
@@ -111,12 +128,20 @@ export default function DutyConsole({
     }
   }, [isOnline, incomingCall, pulseAnim]);
 
-  const getCategoryBadge = (cat: string) => {
+  const getCategoryBadge = (cat?: string) => {
     switch (cat) {
       case 'EMOTIONAL_CRISIS':
-        return { label: 'Duelo Moral', bg: '#FEF3C7', text: '#92400E' };
+      case 'CRISIS':
+        return { label: 'Crisis / Duelo', bg: '#FEF3C7', text: '#92400E' };
       case 'SPIRITUAL_COUNSELING':
-        return { label: 'Estrés Operativo', bg: '#DBEAFE', text: '#1E40AF' };
+      case 'SPIRITUAL':
+        return { label: 'Consejería', bg: '#DBEAFE', text: '#1E40AF' };
+      case 'PRAYER_REQUEST':
+        return { label: 'Oración', bg: '#EDE9FE', text: '#5B21B6' };
+      case 'FAMILY':
+        return { label: 'Familia', bg: '#DCFCE7', text: '#166534' };
+      case 'PERSONAL':
+        return { label: 'Personal', bg: '#E0E7FF', text: '#3730A3' };
       default:
         return { label: 'Asistencia', bg: '#F3F4F6', text: '#374151' };
     }
@@ -127,6 +152,33 @@ export default function DutyConsole({
     if (sev === 3) return '#F59E0B';
     return '#3B82F6';
   };
+
+  const formatReportDate = (rawDate?: string) => {
+    if (!rawDate) return 'Reciente';
+    try {
+      const d = new Date(rawDate);
+      if (isNaN(d.getTime())) return rawDate;
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (isToday) return `Hoy · ${timeStr} hs`;
+      return `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} · ${timeStr} hs`;
+    } catch {
+      return rawDate;
+    }
+  };
+
+  // Dynamic Real Metrics calculation from backend
+  const totalReportsCount = effectiveStats?.totalReports ?? effectiveReports.length;
+  const criticalAlertsCount =
+    effectiveStats?.criticalAlertsCount ??
+    effectiveReports.filter((r) => r.severity >= 4).length;
+  const videoCount =
+    effectiveStats?.bySessionType?.['VIDEO'] ??
+    effectiveReports.filter((r) => r.sessionType === 'VIDEO').length;
+  const chatCount =
+    effectiveStats?.bySessionType?.['CHAT'] ??
+    effectiveReports.filter((r) => r.sessionType === 'CHAT').length;
 
   return (
     <View style={styles.container}>
@@ -163,9 +215,13 @@ export default function DutyConsole({
             <Text style={styles.alertTimeText}>Espera: 14 seg</Text>
           </View>
 
-          <Text style={styles.dispatchTitle}>Consulta Reservada en Espera</Text>
+          <Text style={styles.dispatchTitle}>
+            {incomingCall.callerName || (incomingCall.sessionType === 'CHAT' ? 'Solicitud de Chat' : 'Consulta en Espera')}
+          </Text>
           <Text style={styles.dispatchDesc}>
-            Personal militar · Base de despliegue · Identidad reservada bajo fuero ministerial.
+            {incomingCall.callerName && !incomingCall.callerName.toLowerCase().startsWith('invitado')
+              ? 'Llamada con identidad identificada · Atención pastoral directa.'
+              : 'Personal en servicio · Identidad reservada bajo fuero ministerial.'}
           </Text>
 
           {/* Action Buttons: 1-Tap Dual Choice */}
@@ -254,9 +310,13 @@ export default function DutyConsole({
             <Text style={styles.alertTimeText}>Espera: 14 seg</Text>
           </View>
 
-          <Text style={styles.dispatchTitle}>Consulta Reservada en Espera</Text>
+          <Text style={styles.dispatchTitle}>
+            {incomingCall.callerName || (incomingCall.sessionType === 'CHAT' ? 'Solicitud de Chat' : 'Consulta en Espera')}
+          </Text>
           <Text style={styles.dispatchDesc}>
-            Personal militar · Base de despliegue · Identidad reservada bajo fuero ministerial.
+            {incomingCall.callerName && !incomingCall.callerName.toLowerCase().startsWith('invitado')
+              ? 'Llamada con identidad identificada · Atención pastoral directa.'
+              : 'Personal en servicio · Identidad reservada bajo fuero ministerial.'}
           </Text>
 
        
@@ -306,49 +366,53 @@ export default function DutyConsole({
         </View>
       )}
       */}
-      {/* 3. Operational Shift KPIs */}
+      {/* 3. Operational Real-Time KPIs */}
       <View style={styles.statsSection}>
         <View style={styles.statsHeader}>
-          <Text style={styles.statsSectionTitle}>MÉTRICAS DEL TURNO</Text>
-          <Text style={styles.statsShiftTime}>06:00 - 14:00</Text>
+          <Text style={styles.statsSectionTitle}>MÉTRICAS OPERATIVAS</Text>
+          <Text style={styles.statsShiftTime}>Bitácora en Tiempo Real</Text>
         </View>
 
         <View style={styles.kpiRow}>
-          {/* KPI 1: Atendidos Hoy */}
+          {/* KPI 1: Total Actas */}
           <View style={[styles.kpiCard, globalStyles.shadowSoft]}>
             <View style={styles.kpiTop}>
-              <User size={15} color={Theme.colors.tacticalNavy} />
+              <FileCheck size={15} color={Theme.colors.tacticalNavy} />
               <View style={styles.kpiBadgeGreen}>
-                <Text style={styles.kpiBadgeGreenText}>+1 vs ayer</Text>
+                <Text style={styles.kpiBadgeGreenText}>Registradas</Text>
               </View>
             </View>
-            <Text style={styles.kpiValue}>{stats.servedToday ?? 4}</Text>
-            <Text style={styles.kpiLabel} numberOfLines={1}>Llamadas</Text>
+            <Text style={styles.kpiValue}>{totalReportsCount}</Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>Total Actas</Text>
           </View>
 
-          {/* KPI 2: Horas Escucha */}
+          {/* KPI 2: Casos Críticos */}
           <View style={[styles.kpiCard, globalStyles.shadowSoft]}>
             <View style={styles.kpiTop}>
-              <Clock size={15} color="#9A805B" />
-              <View style={styles.kpiBadgeNeutral}>
-                <Text style={styles.kpiBadgeNeutralText}>Meta 6h</Text>
+              <ShieldAlert size={15} color="#DC2626" />
+              <View style={[styles.kpiBadgeNeutral, { backgroundColor: '#FEE2E2' }]}>
+                <Text style={[styles.kpiBadgeNeutralText, { color: '#B91C1C' }]}>Sev. ≥ 4</Text>
               </View>
             </View>
-            <Text style={styles.kpiValue}>{stats.listeningHours ?? '5.2 hs'}</Text>
-            <Text style={styles.kpiLabel} numberOfLines={1}>Escucha</Text>
+            <Text style={[styles.kpiValue, criticalAlertsCount > 0 && { color: '#DC2626' }]}>
+              {criticalAlertsCount}
+            </Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>Casos Críticos</Text>
           </View>
 
-          {/* KPI 3: Tiempo Respuesta */}
+          {/* KPI 3: Desglose Canales */}
           <View style={[styles.kpiCard, globalStyles.shadowSoft]}>
             <View style={styles.kpiTop}>
-              <Timer size={15} color="#059669" />
+              <Activity size={15} color="#059669" />
               <View style={styles.kpiBadgeGreen}>
-                <Text style={styles.kpiBadgeGreenText}>Óptimo</Text>
+                <Text style={styles.kpiBadgeGreenText}>Canales</Text>
               </View>
-            </View >
+            </View>
             <View style={styles.kpiLeyend}>
-              <Text style={styles.kpiValue}>{stats.avgResponseTime ?? '< 28 s'}</Text>
-              <Text style={styles.kpiLabel} numberOfLines={1}>Tiempo Resp.</Text>
+              <Text style={styles.kpiValue}>
+                {videoCount}V · {chatCount}C
+              </Text>
+              <Text style={styles.kpiLabel} numberOfLines={1}>Video / Chat</Text>
             </View>
           </View>
         </View>
@@ -358,7 +422,12 @@ export default function DutyConsole({
       <View style={[styles.reportsSection, globalStyles.shadowSoft]}>
         <View style={styles.reportsHeader}>
           <View style={styles.reportsTitleRow}>
-            <Text style={styles.reportsTitle}>Informes de llamadas</Text>
+            <Text style={styles.reportsTitle}>Informes de guardia</Text>
+            {effectiveReports.length > 0 && (
+              <Text style={styles.reportsSubtitle}>
+                {effectiveReports.length} {effectiveReports.length === 1 ? 'acta registrada' : 'actas registradas'}
+              </Text>
+            )}
           </View>
           {onOpenNewReport && (
             <TouchableOpacity
@@ -372,48 +441,106 @@ export default function DutyConsole({
           )}
         </View>
 
-        <View style={styles.reportsList}>
-          {RECENT_DUTY_REPORTS.map((report) => {
-            const badge = getCategoryBadge(report.category);
-            const dotColor = getSeverityDot(report.severity);
+        {isLoadingReports && effectiveReports.length === 0 ? (
+          <View style={styles.reportsLoadingBox}>
+            <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
+            <Text style={styles.reportsLoadingText}>Cargando bitácora pastoral...</Text>
+          </View>
+        ) : effectiveReports.length === 0 ? (
+          <View style={styles.emptyReportsBox}>
+            <FileText size={22} color={Theme.colors.outline} />
+            <Text style={styles.emptyReportsTitle}>Sin informes registrados</Text>
+            <Text style={styles.emptyReportsSub}>
+              Luego de atender una llamada o chat pastoral, completá el acta para archivarla en la bitácora.
+            </Text>
+            {onOpenNewReport && (
+              <TouchableOpacity
+                style={styles.emptyCreateBtn}
+                onPress={onOpenNewReport}
+                activeOpacity={0.85}
+              >
+                <Plus size={13} color="#FFFFFF" />
+                <Text style={styles.emptyCreateBtnText}>Redactar Primer Informe</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={styles.reportsList}>
+            {effectiveReports.slice(0, 3).map((report) => {
+              const badge = getCategoryBadge(report.category);
+              const dotColor = getSeverityDot(report.severity);
 
-            return (
-              <View key={report.id} style={styles.dutyReportCard}>
-                <View style={styles.dutyReportTop}>
-                  <Text style={styles.dutyReportDate}>{report.createdAt}</Text>
-                  <View style={styles.dutyBadgages}>
-                    <View style={styles.dutyReportMeta}>
-
-                      <View style={[styles.dutyCategoryBadge, { backgroundColor: badge.bg }]}>
-                        <Text style={[styles.dutyCategoryBadgeText, { color: badge.text }]}>
-                          {badge.label}
-                        </Text>
+              return (
+                <View key={report.id || report.sessionId} style={styles.dutyReportCard}>
+                  <View style={styles.dutyReportTop}>
+                    <View style={styles.dutyReportDateRow}>
+                      <Text style={styles.dutyReportDate}>
+                        {formatReportDate(report.createdAt)}
+                      </Text>
+                      {report.chaplainUsername && (
+                        <View style={styles.chaplainAuthorBadge}>
+                          <User size={10} color="#0c7ae0" />
+                          <Text style={styles.chaplainAuthorBadgeText} numberOfLines={1}>
+                            Cap. {report.chaplainUsername}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.dutyBadgages}>
+                      <View style={styles.dutyReportMeta}>
+                        <View style={[styles.dutyCategoryBadge, { backgroundColor: badge.bg }]}>
+                          <Text style={[styles.dutyCategoryBadgeText, { color: badge.text }]}>
+                            {badge.label}
+                          </Text>
+                        </View>
+                        {report.sessionType && (
+                          <View style={styles.sessionTypePill}>
+                            {report.sessionType === 'CHAT' ? (
+                              <MessageSquare size={10} color="#505F76" />
+                            ) : (
+                              <Video size={10} color="#505F76" />
+                            )}
+                            <Text style={styles.sessionTypePillText}>
+                              {report.sessionType === 'CHAT' ? 'Chat' : 'Video'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.severityRow}>
+                        <Text style={styles.severityLabel}>Severidad {report.severity}/5</Text>
+                        <View style={[styles.severityDot, { backgroundColor: dotColor }]} />
                       </View>
                     </View>
-                    <View style={styles.severityRow}>
-                      <Text style={styles.severityLabel}>Severidad {report.severity}/5</Text>
-                      <View style={[styles.severityDot, { backgroundColor: dotColor }]} />
+                  </View>
+
+                  {report.subject ? (
+                    <Text style={styles.dutyReportSubject} numberOfLines={1}>
+                      {report.subject}
+                    </Text>
+                  ) : null}
+
+                  <Text style={styles.dutyReportSummary} numberOfLines={2}>
+                    {report.summary}
+                  </Text>
+
+                  <View style={styles.dutyReportBottom}>
+                    <View style={styles.guaranteeTag}>
+                      <Lock size={11} color="#9A805B" />
+                      <Text style={styles.guaranteeTagText}>Secreto de Confesión</Text>
                     </View>
+
+                    <TouchableOpacity
+                      onPress={() => onViewReportDetails && onViewReportDetails(report)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.viewActaBtnText}>Ver acta →</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-
-                <Text style={styles.dutyReportSummary} numberOfLines={2}>
-                  {report.summary}
-                </Text>
-
-                <View style={styles.dutyReportBottom}>
-
-                  <TouchableOpacity
-                    onPress={() => onViewReportDetails && onViewReportDetails(report)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.viewActaBtnText}>Ver acta →</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* Link to Full Informes Screen */}
         {onNavigateToInformes && (
@@ -823,6 +950,64 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: Theme.colors.onSurface,
   },
+  reportsSubtitle: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 11.5,
+    color: Theme.colors.onSurfaceVariant,
+    marginTop: 1,
+  },
+  reportsLoadingBox: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  reportsLoadingText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 12,
+    color: Theme.colors.outline,
+  },
+  emptyReportsBox: {
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: Theme.roundness.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#CBD5E1',
+    marginVertical: 4,
+  },
+  emptyReportsTitle: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13.5,
+    color: '#475569',
+    marginTop: 6,
+  },
+  emptyReportsSub: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 11.5,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 2,
+    maxWidth: 240,
+  },
+  emptyCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Theme.colors.tacticalNavy,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 10,
+  },
+  emptyCreateBtnText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   newReportSmallBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -853,18 +1038,61 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
+  dutyReportDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  chaplainAuthorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  chaplainAuthorBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0c7ae0',
+    maxWidth: 120,
+  },
   dutyBadgages: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
-    marginTop: 8,
+    marginTop: 6,
     width: '100%',
   },
   dutyReportMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  sessionTypePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  sessionTypePillText: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  dutyReportSubject: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13,
+    color: '#0F172A',
+    marginBottom: 3,
   },
   dutyReportDate: {
     fontSize: 11,
