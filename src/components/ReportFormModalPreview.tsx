@@ -24,6 +24,8 @@ import {
   Check,
   AlertTriangle,
 } from 'lucide-react-native';
+import type { CanonicalReportCategory } from '../types/api';
+import { normalizeReportCategory } from '../types/api';
 
 export interface ReportFormModalPreviewProps {
   visible: boolean;
@@ -32,14 +34,15 @@ export interface ReportFormModalPreviewProps {
   onSubmitted: () => void;
 }
 
-const CATEGORIES = [
-  { key: 'SPIRITUAL_COUNSELING', label: 'Consejería Espiritual' },
-  { key: 'EMOTIONAL_CRISIS', label: 'Crisis Emocional' },
-  { key: 'PRAYER_REQUEST', label: 'Petición de Oración' },
-  { key: 'OTHER', label: 'Otro' },
-] as const;
+const CATEGORIES: { key: CanonicalReportCategory; label: string }[] = [
+  { key: 'SPIRITUAL', label: 'Consejería Espiritual / Oración' },
+  { key: 'CRISIS', label: 'Crisis / Duelo Emocional' },
+  { key: 'FAMILY', label: 'Familia / Vínculos' },
+  { key: 'PERSONAL', label: 'Personal / Confidencial' },
+  { key: 'OTHER', label: 'Otro Asunto Pastoral' },
+];
 
-type CategoryType = (typeof CATEGORIES)[number]['key'];
+type CategoryType = CanonicalReportCategory;
 
 const SEVERITY_COLORS: Record<number, { color: string; bg: string; label: string }> = {
   1: { color: '#059669', bg: '#ECFDF5', label: '1 - Leve' },
@@ -57,7 +60,7 @@ export default function ReportFormModalPreview({
 }: ReportFormModalPreviewProps) {
   const { width } = useWindowDimensions();
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState<CategoryType>('SPIRITUAL_COUNSELING');
+  const [category, setCategory] = useState<CategoryType>('SPIRITUAL');
   const [severity, setSeverity] = useState(3);
   const [summary, setSummary] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,6 +88,8 @@ export default function ReportFormModalPreview({
       return;
     }
 
+    const backendCategory = normalizeReportCategory(category);
+
     setIsSubmitting(true);
     setError(null);
     try {
@@ -92,7 +97,7 @@ export default function ReportFormModalPreview({
         method: 'POST',
         body: JSON.stringify({
           subject: subject.trim(),
-          category,
+          category: backendCategory,
           severity,
           summary: summary.trim(),
         }),

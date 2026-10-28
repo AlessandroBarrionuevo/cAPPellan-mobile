@@ -13,6 +13,8 @@ import { Theme, globalStyles } from '../theme/Theme';
 import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { ClipboardList, Star, X } from 'lucide-react-native';
+import type { CanonicalReportCategory } from '../types/api';
+import { normalizeReportCategory } from '../types/api';
 
 interface ReportFormModalProps {
   visible: boolean;
@@ -21,12 +23,13 @@ interface ReportFormModalProps {
   onSubmitted: () => void;
 }
 
-const CATEGORIES = [
-  { key: 'SPIRITUAL_COUNSELING', label: 'Consejería Espiritual' },
-  { key: 'EMOTIONAL_CRISIS', label: 'Crisis Emocional' },
-  { key: 'PRAYER_REQUEST', label: 'Petición de Oración' },
-  { key: 'OTHER', label: 'Otro' },
-] as const;
+const CATEGORIES: { key: CanonicalReportCategory; label: string }[] = [
+  { key: 'SPIRITUAL', label: 'Consejería Espiritual / Oración' },
+  { key: 'CRISIS', label: 'Crisis / Duelo Emocional' },
+  { key: 'FAMILY', label: 'Familia / Vínculos' },
+  { key: 'PERSONAL', label: 'Personal / Confidencial' },
+  { key: 'OTHER', label: 'Otro Asunto Pastoral' },
+];
 
 export default function ReportFormModal({
   visible,
@@ -35,9 +38,7 @@ export default function ReportFormModal({
   onSubmitted,
 }: ReportFormModalProps) {
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState<
-    'SPIRITUAL_COUNSELING' | 'EMOTIONAL_CRISIS' | 'PRAYER_REQUEST' | 'OTHER'
-  >('SPIRITUAL_COUNSELING');
+  const [category, setCategory] = useState<CanonicalReportCategory>('SPIRITUAL');
   const [severity, setSeverity] = useState(3);
   const [summary, setSummary] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,6 +51,8 @@ export default function ReportFormModal({
       return;
     }
 
+    const backendCategory = normalizeReportCategory(category);
+
     setIsSubmitting(true);
     setError(null);
     try {
@@ -57,7 +60,7 @@ export default function ReportFormModal({
         method: 'POST',
         body: JSON.stringify({
           subject: subject.trim(),
-          category,
+          category: backendCategory,
           severity,
           summary: summary.trim(),
         }),

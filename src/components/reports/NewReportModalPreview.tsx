@@ -27,7 +27,8 @@ import {
   Sparkles,
   ClipboardList,
 } from 'lucide-react-native';
-import type { PostCallReport } from '../../types/api';
+import type { PostCallReport, CanonicalReportCategory } from '../../types/api';
+import { normalizeReportCategory } from '../../types/api';
 
 export interface NewReportModalPreviewProps {
   visible: boolean;
@@ -36,14 +37,15 @@ export interface NewReportModalPreviewProps {
   onSubmitted: (report?: PostCallReport) => void;
 }
 
-const CATEGORIES = [
-  { key: 'SPIRITUAL_COUNSELING', label: 'Consejería Espiritual', desc: 'Guía pastoral y discernimiento' },
-  { key: 'EMOTIONAL_CRISIS', label: 'Crisis / Duelo', desc: 'Acompañamiento en dolor o trauma' },
-  { key: 'PRAYER_REQUEST', label: 'Petición de Oración', desc: 'Intercesión comunitaria o privada' },
-  { key: 'OTHER', label: 'Otro Asunto', desc: 'Consulta reservada general' },
-] as const;
+const CATEGORIES: { key: CanonicalReportCategory; label: string; desc: string }[] = [
+  { key: 'SPIRITUAL', label: 'Consejería Espiritual / Oración', desc: 'Guía pastoral, intercesión y discernimiento' },
+  { key: 'CRISIS', label: 'Crisis / Duelo Emocional', desc: 'Acompañamiento en dolor agudo, trauma o urgencia' },
+  { key: 'FAMILY', label: 'Familia / Vínculos', desc: 'Dificultades familiares, matrimonio o crianza' },
+  { key: 'PERSONAL', label: 'Personal / Confidencial', desc: 'Consulta reservada, dilemas de vocación o ética' },
+  { key: 'OTHER', label: 'Otro Asunto Pastoral', desc: 'Asistencia y seguimiento pastoral general' },
+];
 
-type CategoryKey = (typeof CATEGORIES)[number]['key'];
+type CategoryKey = CanonicalReportCategory;
 
 const SEVERITY_LEVELS = [
   { level: 1, label: 'Leve', desc: 'Atención ordinaria de rutina', color: '#059669', bg: '#ECFDF5' },
@@ -61,8 +63,9 @@ export function NewReportModalPreview({
 }: NewReportModalPreviewProps) {
   const { width, height } = useWindowDimensions();
   const [manualSessionId, setManualSessionId] = useState('');
+  const [recentEndedSessions, setRecentEndedSessions] = useState<{ id: number; sessionType?: string; createdAt?: string }[]>([]);
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState<CategoryKey>('SPIRITUAL_COUNSELING');
+  const [category, setCategory] = useState<CategoryKey>('SPIRITUAL');
   const [severity, setSeverity] = useState<number>(2);
   const [summary, setSummary] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,8 +107,33 @@ export function NewReportModalPreview({
           useNativeDriver: true,
         }),
       ]).start();
+
+      // If opened manually without session ID, query recent ended calls for quick selection
+      if (!sessionId) {
+        Promise.all([
+          request<any[]>(`${ENDPOINTS.CALLS_LIST}?status=ENDED`),
+          request<any[]>(ENDPOINTS.REPORTS).catch(() => []),
+        ])
+          .then(([callsData, reportsData]) => {
+            if (Array.isArray(callsData) && callsData.length > 0) {
+              const reportedSessionIds = new Set(
+                (Array.isArray(reportsData) ? reportsData : [])
+                  .map((r: any) => r.sessionId)
+                  .filter(Boolean)
+              );
+              const pending = callsData.filter((c: any) => !reportedSessionIds.has(c.id ?? c.sessionId));
+              const available = pending.length > 0 ? pending : callsData;
+              setRecentEndedSessions(available.slice(0, 6));
+              const topId = available[0]?.id ?? available[0]?.sessionId;
+              if (topId && !manualSessionId) {
+                setManualSessionId(String(topId));
+              }
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [visible, modalScale, modalOpacity]);
+  }, [visible, sessionId, modalScale, modalOpacity]);
 
   const currentSeverityObj =
     SEVERITY_LEVELS.find((s) => s.level === severity) || SEVERITY_LEVELS[1];
@@ -148,11 +176,18 @@ export function NewReportModalPreview({
     const resolvedSessionId =
       sessionId || (manualSessionId.trim() ? parseInt(manualSessionId.trim(), 10) : 0);
 
+    if (!resolvedSessionId || resolvedSessionId <= 0) {
+      setError('Por favor ingresá o seleccioná el N° de una llamada o chat finalizado.');
+      return;
+    }
+
+    const backendCategory = normalizeReportCategory(category);
+
     const reportPayload: PostCallReport = {
       id: Date.now(),
-      sessionId: resolvedSessionId || Date.now() % 10000,
+      sessionId: resolvedSessionId,
       subject: subject.trim(),
-      category,
+      category: backendCategory,
       severity,
       summary: summary.trim(),
       createdAt: new Date().toISOString(),
@@ -162,23 +197,31 @@ export function NewReportModalPreview({
     setError(null);
 
     try {
-      if (resolvedSessionId && resolvedSessionId > 0) {
-        try {
-          const res = await request<PostCallReport>(ENDPOINTS.CALL_REPORT(resolvedSessionId), {
-            method: 'POST',
-            body: JSON.stringify({
-              subject: subject.trim(),
-              category,
-              severity,
-              summary: summary.trim(),
-            }),
-          });
-          if (res) {
-            reportPayload.id = res.id || reportPayload.id;
-          }
-        } catch (apiErr) {
-          console.log('[NewReportModalPreview] Sync notice:', apiErr);
+      try {
+        const res = await request<PostCallReport>(ENDPOINTS.CALL_REPORT(resolvedSessionId), {
+          method: 'POST',
+          body: JSON.stringify({
+            subject: subject.trim(),
+            category: backendCategory,
+            severity,
+            summary: summary.trim(),
+          }),
+        });
+        if (res) {
+          reportPayload.id = res.id || reportPayload.id;
         }
+      } catch (apiErr: any) {
+        const msg = apiErr?.message || '';
+        if (apiErr.status === 404 || msg.includes('not found') || msg.includes('Session not found')) {
+          throw new Error(`La sesión #${resolvedSessionId} no existe en el sistema. Los informes deben pertenecer a una llamada o chat real.`);
+        }
+        if (apiErr.status === 409 || msg.includes('ENDED') || msg.includes('already exists')) {
+          throw new Error(`La sesión #${resolvedSessionId} no se encuentra finalizada o ya tiene un informe registrado.`);
+        }
+        if (apiErr.status === 403 || msg.includes('attending chaplain')) {
+          throw new Error(`Solo el capellán que atendió la sesión #${resolvedSessionId} puede asentar su acta.`);
+        }
+        throw new Error(msg || 'Error al sellar el informe pastoral en el servidor.');
       }
 
       setSubject('');
@@ -262,7 +305,7 @@ export function NewReportModalPreview({
               <View style={styles.fieldLabelRow}>
                 <View style={styles.blueDot} />
                 <Text style={styles.fieldLabel}>
-                  {sessionId ? 'EXPEDIENTE VINCULADO' : 'N° DE SESIÓN O REFERENCIA (OPCIONAL)'}
+                  {sessionId ? 'EXPEDIENTE VINCULADO' : 'N° DE SESIÓN FINALIZADA *'}
                 </Text>
               </View>
 
@@ -271,14 +314,52 @@ export function NewReportModalPreview({
                   <Text style={styles.sessionBadgeText}>SESIÓN ACTIVA #{sessionId}</Text>
                 </View>
               ) : (
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Ej: 104 (o dejar vacío para acta general)"
-                  placeholderTextColor="#94A3B8"
-                  value={manualSessionId}
-                  onChangeText={setManualSessionId}
-                  keyboardType="numeric"
-                />
+                <>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="N° de llamada o chat atendido (ej: 42)"
+                    placeholderTextColor="#94A3B8"
+                    value={manualSessionId}
+                    onChangeText={setManualSessionId}
+                    keyboardType="numeric"
+                  />
+                  {recentEndedSessions.length > 0 && (
+                    <View style={styles.quickSessionsContainer}>
+                      <Text style={styles.quickSessionsLabel}>Sesiones atendidas recientes:</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.quickSessionsScroll}
+                      >
+                        {recentEndedSessions.map((s) => {
+                          const sid = s.id ?? (s as any).sessionId;
+                          const isSelected = manualSessionId === String(sid);
+                          const typeLabel = s.sessionType === 'CHAT' ? 'Chat' : 'Llamada';
+                          return (
+                            <TouchableOpacity
+                              key={sid}
+                              style={[
+                                styles.quickSessionChip,
+                                isSelected && styles.quickSessionChipActive,
+                              ]}
+                              onPress={() => setManualSessionId(String(sid))}
+                              activeOpacity={0.7}
+                            >
+                              <Text
+                                style={[
+                                  styles.quickSessionChipText,
+                                  isSelected && styles.quickSessionChipTextActive,
+                                ]}
+                              >
+                                #{sid} • {typeLabel}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
@@ -286,7 +367,7 @@ export function NewReportModalPreview({
             <View style={styles.formCard}>
               <View style={styles.fieldLabelRow}>
                 <View style={styles.blueDot} />
-                <Text style={styles.fieldLabel}>ASUNTO O MOTIVO DE CONSULTA *</Text>
+                <Text style={styles.fieldLabel}>ASUNTO O MOTIVO DE CONSULTA</Text>
               </View>
               <TextInput
                 style={[
@@ -458,7 +539,7 @@ export function NewReportModalPreview({
               <View style={styles.severityHeaderRow}>
                 <View style={styles.fieldLabelRow}>
                   <View style={styles.blueDot} />
-                  <Text style={styles.fieldLabel}>SÍNTESIS PASTORAL CONFIDENCIAL *</Text>
+                  <Text style={styles.fieldLabel}>SÍNTESIS PASTORAL CONFIDENCIAL</Text>
                 </View>
                 <Text style={styles.charCount}>{summary.length}/500</Text>
               </View>
@@ -497,7 +578,7 @@ export function NewReportModalPreview({
               ) : (
                 <>
                   <ShieldCheck size={18} color="#FFFFFF" strokeWidth={2.4} />
-                  <Text style={styles.submitShapedBtnText}>Sellar y Guardar Informe</Text>
+                  <Text style={styles.submitShapedBtnText}>Enviar Informe</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -676,6 +757,42 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '800',
     color: '#0C7AE0',
+  },
+  quickSessionsContainer: {
+    marginTop: 10,
+  },
+  quickSessionsLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  quickSessionsScroll: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  quickSessionChip: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  quickSessionChipActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  quickSessionChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  quickSessionChipTextActive: {
+    color: '#0C7AE0',
+    fontWeight: '700',
   },
   textInput: {
     backgroundColor: '#FFFFFF',

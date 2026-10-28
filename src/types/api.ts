@@ -58,6 +58,7 @@ export interface CallIntake {
   notes?: string;
   metadata?: Record<string, any> | string;
   anonymous?: boolean;
+  isAnonymous?: boolean;
 }
 
 export interface CallRequestPayload {
@@ -67,6 +68,7 @@ export interface CallRequestPayload {
   notes?: string;
   metadata?: Record<string, any> | string;
   anonymous?: boolean;
+  isAnonymous?: boolean;
 }
 
 export interface Session {
@@ -79,6 +81,7 @@ export interface Session {
   userId: number;
   chaplainId: number | null;
   clientToken?: string;
+  callerName?: string | null;
   intake?: CallIntake | null;
   createdAt: string;
   updatedAt: string;
@@ -101,23 +104,58 @@ export interface CallResponse {
   endReason?: EndReason | string | null;
 }
 
+export type CanonicalReportCategory =
+  | 'SPIRITUAL'
+  | 'FAMILY'
+  | 'PERSONAL'
+  | 'CRISIS'
+  | 'OTHER';
+
+export type ReportCategory =
+  | CanonicalReportCategory
+  | 'SPIRITUAL_COUNSELING'
+  | 'EMOTIONAL_CRISIS'
+  | 'PRAYER_REQUEST';
+
+export function normalizeReportCategory(cat?: string): CanonicalReportCategory {
+  switch (cat) {
+    case 'SPIRITUAL_COUNSELING':
+    case 'PRAYER_REQUEST':
+    case 'SPIRITUAL':
+      return 'SPIRITUAL';
+    case 'EMOTIONAL_CRISIS':
+    case 'CRISIS':
+      return 'CRISIS';
+    case 'FAMILY':
+      return 'FAMILY';
+    case 'PERSONAL':
+      return 'PERSONAL';
+    default:
+      return 'OTHER';
+  }
+}
+
 export interface PostCallReport {
   id?: number;
   sessionId: number;
   subject: string;
-  category:
-    | 'SPIRITUAL_COUNSELING'
-    | 'EMOTIONAL_CRISIS'
-    | 'PRAYER_REQUEST'
-    | 'OTHER'
-    | 'SPIRITUAL'
-    | 'FAMILY'
-    | 'PERSONAL'
-    | 'CRISIS';
+  category: ReportCategory;
   severity: number;
   summary: string;
   createdBy?: number;
   createdAt?: string;
+  chaplainUsername?: string | null;
+  leaderId?: number | null;
+  leaderUsername?: string | null;
+  sessionType?: SessionType | null;
+}
+
+export interface ReportStats {
+  totalReports: number;
+  criticalAlertsCount: number;
+  byCategory: Record<string, number>;
+  bySeverity: Record<string, number>;
+  bySessionType: Record<string, number>;
 }
 
 export interface ChaplainInfo {
@@ -186,6 +224,7 @@ export interface BasicProfile {
 export interface UpdateBasicProfileRequest {
   fullName?: string;
   isAnonymous?: boolean;
+  anonymous?: boolean;
   phone?: string;
   location?: string;
 }

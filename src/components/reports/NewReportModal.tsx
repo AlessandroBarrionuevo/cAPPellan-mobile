@@ -22,7 +22,8 @@ import {
   Send,
 } from 'lucide-react-native';
 import { TacticalButton } from '../common';
-import type { PostCallReport } from '../../types/api';
+import type { PostCallReport, CanonicalReportCategory } from '../../types/api';
+import { normalizeReportCategory } from '../../types/api';
 
 export interface NewReportModalProps {
   visible: boolean;
@@ -31,12 +32,13 @@ export interface NewReportModalProps {
   onSubmitted: (report?: PostCallReport) => void;
 }
 
-const CATEGORIES = [
-  { key: 'SPIRITUAL_COUNSELING', label: 'Consejería Espiritual' },
-  { key: 'EMOTIONAL_CRISIS', label: 'Crisis / Duelo' },
-  { key: 'PRAYER_REQUEST', label: 'Petición de Oración' },
-  { key: 'OTHER', label: 'Otro Asunto' },
-] as const;
+const CATEGORIES: { key: CanonicalReportCategory; label: string }[] = [
+  { key: 'SPIRITUAL', label: 'Consejería Espiritual / Oración' },
+  { key: 'CRISIS', label: 'Crisis / Duelo Emocional' },
+  { key: 'FAMILY', label: 'Familia / Vínculos' },
+  { key: 'PERSONAL', label: 'Personal / Confidencial' },
+  { key: 'OTHER', label: 'Otro Asunto Pastoral' },
+];
 
 const SEVERITY_LEVELS = [
   { level: 1, label: '1 - Leve', color: '#10B981' },
@@ -55,9 +57,7 @@ export function NewReportModal({
   const { width } = useWindowDimensions();
   const [manualSessionId, setManualSessionId] = useState('');
   const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState<
-    'SPIRITUAL_COUNSELING' | 'EMOTIONAL_CRISIS' | 'PRAYER_REQUEST' | 'OTHER'
-  >('SPIRITUAL_COUNSELING');
+  const [category, setCategory] = useState<CanonicalReportCategory>('SPIRITUAL');
   const [severity, setSeverity] = useState(2);
   const [summary, setSummary] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,11 +74,13 @@ export function NewReportModal({
     const resolvedSessionId =
       sessionId || (manualSessionId.trim() ? parseInt(manualSessionId.trim(), 10) : 0);
 
+    const backendCategory = normalizeReportCategory(category);
+
     const reportPayload: PostCallReport = {
       id: Date.now(),
       sessionId: resolvedSessionId || Date.now() % 10000,
       subject: subject.trim(),
-      category,
+      category: backendCategory,
       severity,
       summary: summary.trim(),
       createdAt: new Date().toISOString(),
@@ -93,7 +95,7 @@ export function NewReportModal({
             method: 'POST',
             body: JSON.stringify({
               subject: subject.trim(),
-              category,
+              category: backendCategory,
               severity,
               summary: summary.trim(),
             }),

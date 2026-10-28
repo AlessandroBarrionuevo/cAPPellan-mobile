@@ -1,4 +1,5 @@
 import { ENV } from '../../config/env';
+import { setNativeAuthContext } from '../../../modules/incoming-call';
 
 export class ApiError extends Error {
   status: number;
@@ -22,6 +23,7 @@ console.log(`[API Client] Base URL activa: ${customBaseUrl}`);
 export function setApiBaseUrl(url: string) {
   customBaseUrl = url;
   console.log(`[API Client] Base URL actualizada: ${customBaseUrl}`);
+  setNativeAuthContext(activeAuthToken, customBaseUrl);
 }
 
 export function getApiBaseUrl() {
@@ -30,6 +32,7 @@ export function getApiBaseUrl() {
 
 export function setAuthToken(token: string | null) {
   activeAuthToken = token;
+  setNativeAuthContext(activeAuthToken, customBaseUrl);
 }
 
 export function getAuthToken(): string | null {
@@ -53,6 +56,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     ...(token ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` } : {}),
     ...(activeClientToken ? { 'X-Client-Token': activeClientToken } : {}),
     ...((options.headers as Record<string, string>) || {}),
