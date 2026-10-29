@@ -340,21 +340,7 @@ export default function NoChaplainAvailableModal({
 
           {/* Footer Actions */}
           <View style={styles.footerCol}>
-            {onNavigateToPrayers && (
-              <TouchableOpacity
-                style={styles.prayerWallBtn}
-                onPress={() => {
-                  onClose();
-                  onNavigateToPrayers();
-                }}
-                activeOpacity={0.8}
-              >
-                <HeartHandshake size={16} color="#0C7AE0" strokeWidth={2.2} />
-                <Text style={styles.prayerWallBtnText}>Dejar Petición en Muro de Oración</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.footerRow}>
+<View style={styles.footerRow}>
               {onRetry && (
                 <TouchableOpacity
                   style={styles.retryButton}
@@ -364,8 +350,7 @@ export default function NoChaplainAvailableModal({
                   }}
                   activeOpacity={0.8}
                 >
-                  <RotateCcw size={14} color="#334155" style={{ marginRight: 6 }} />
-                  <Text style={styles.retryButtonText}>Volver a intentar</Text>
+                  <Text style={styles.retryButtonText}>Reintentar</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -376,6 +361,19 @@ export default function NoChaplainAvailableModal({
                 <Text style={styles.dismissButtonText}>Entendido</Text>
               </TouchableOpacity>
             </View>
+            
+            {onNavigateToPrayers && (
+              <TouchableOpacity
+                style={styles.prayerWallBtn}
+                onPress={() => {
+                  onClose();
+                  onNavigateToPrayers();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.prayerWallBtnText}>Ir al Muro de Oración</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>

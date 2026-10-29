@@ -648,13 +648,6 @@ export default function LecturaScreen() {
               </View>
             ) : null}
 
-            {/* Attribution Footnote */}
-            <View style={styles.attributionFootnote}>
-              <Text style={[styles.attributionText, { color: subtextColor }]}>
-                Palabra de Dios para ti (PDDPT) © 2020 Asociación Bíblica Latinoamericana. Licencia CC BY 4.0. Distribución vía eBible.org
-              </Text>
-            </View>
-
             {/* Field Chaplain Pastoral Reflection Note */}
             <View style={styles.pastoralNote}>
               <ShieldCheck

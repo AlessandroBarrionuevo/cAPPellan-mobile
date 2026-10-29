@@ -1,4 +1,5 @@
 import { requireNativeModule, Platform } from 'expo-modules-core';
+import type { EventSubscription } from 'expo-modules-core';
 
 export interface IncomingCallOptions {
   sessionId: number;
@@ -20,11 +21,14 @@ export interface InitialCallData {
 interface IncomingCallNativeModule {
   getInitialCallData(): InitialCallData | null;
   clearInitialCallData(): void;
+  consumeLastRejectedSessionId(): number | null;
+  setAuthContext(token: string | null, baseUrl: string | null, role: string | null): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
   displayIncomingCall(options: IncomingCallOptions): boolean;
   dismissIncomingCall(sessionId: number): void;
   turnScreenOnAndDismissKeyguard(): void;
+  addListener(eventName: string, listener: (...args: any[]) => void): EventSubscription;
 }
 
 const NativeModule: IncomingCallNativeModule | null =
@@ -46,6 +50,40 @@ export function clearInitialCallData(): void {
     NativeModule.clearInitialCallData();
   } catch (err) {
     console.warn('[IncomingCallModule] Failed to clear initial call data:', err);
+  }
+}
+
+export function consumeLastRejectedSessionId(): number | null {
+  if (Platform.OS !== 'android' || !NativeModule) return null;
+  try {
+    return NativeModule.consumeLastRejectedSessionId?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setNativeAuthContext(
+  token: string | null,
+  baseUrl: string | null,
+  role: string | null = null
+): void {
+  if (Platform.OS !== 'android' || !NativeModule) return;
+  try {
+    NativeModule.setAuthContext(token, baseUrl, role);
+  } catch (err) {
+    console.warn('[IncomingCallModule] Failed to set native auth context:', err);
+  }
+}
+
+export function addIncomingCallRejectedListener(
+  listener: (event: { sessionId: number }) => void
+): { remove: () => void } {
+  if (Platform.OS !== 'android' || !NativeModule) return { remove: () => {} };
+  try {
+    return (NativeModule as any).addListener('onIncomingCallRejected', listener);
+  } catch (err) {
+    console.warn('[IncomingCallModule] Failed to add onIncomingCallRejected listener:', err);
+    return { remove: () => {} };
   }
 }
 

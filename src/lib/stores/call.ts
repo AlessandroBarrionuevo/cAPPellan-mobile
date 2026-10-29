@@ -13,7 +13,9 @@ interface CallState {
   lastEndReason: EndReason | string | null;
   lastEndedSessionType: SessionType | null;
   error: string | null;
+  isAnonymous: boolean;
 
+  setIsAnonymous: (val: boolean) => void;
   requestCall: (type?: SessionType, intake?: CallIntake) => Promise<void>;
   reconnect: (sessionId?: number) => Promise<boolean>;
   endCall: (sessionId?: number) => Promise<void>;
@@ -32,13 +34,27 @@ export const useCallStore = createStore<CallState>((set, get) => ({
   lastEndReason: null,
   lastEndedSessionType: null,
   error: null,
+  isAnonymous: false,
+
+  setIsAnonymous: (val: boolean) => {
+    set({ isAnonymous: val });
+  },
 
   requestCall: async (type: SessionType = 'VIDEO', intake?: CallIntake) => {
     set({ callStatus: 'REQUESTING', error: null });
     try {
+      const isAnon =
+        typeof intake?.anonymous === 'boolean'
+          ? intake.anonymous
+          : typeof intake?.isAnonymous === 'boolean'
+            ? intake.isAnonymous
+            : get().isAnonymous;
+
       const payload: CallRequestPayload = {
         type,
         ...(intake || {}),
+        anonymous: isAnon,
+        isAnonymous: isAnon,
       };
 
       const response = await request<CallResponse>(ENDPOINTS.CALLS_REQUEST, {
@@ -49,6 +65,9 @@ export const useCallStore = createStore<CallState>((set, get) => ({
       const sessionWithDefaults: CallResponse = {
         ...response,
         sessionType: response.sessionType || type,
+        intake: response.intake
+          ? { ...response.intake, anonymous: isAnon, isAnonymous: isAnon }
+          : { ...(intake || {}), anonymous: isAnon, isAnonymous: isAnon },
       };
 
       if (response.clientToken) {

@@ -38,6 +38,7 @@ export type ExtendedSessionType = SessionType | 'AUDIO' | 'VOICE';
 export interface CallIntakeModalPreviewProps {
   visible: boolean;
   sessionType?: ExtendedSessionType;
+  isAnonymous?: boolean;
   onClose: () => void;
   onSubmit: (intake?: CallIntake) => void;
   isSubmitting?: boolean;
@@ -112,6 +113,7 @@ const REASON_OPTIONS: { key: IntakeReason; label: string; desc: string }[] = [
 export default function CallIntakeModalPreview({
   visible,
   sessionType = 'VIDEO',
+  isAnonymous,
   onClose,
   onSubmit,
   isSubmitting = false,
@@ -214,11 +216,12 @@ export default function CallIntakeModalPreview({
       moodScore: selectedMood,
       reason: selectedReason,
       notes: notes.trim() ? notes.trim() : undefined,
+      ...(typeof isAnonymous === 'boolean' ? { anonymous: isAnonymous, isAnonymous } : {}),
     });
   };
 
   const handleSkipIntake = () => {
-    onSubmit(undefined);
+    onSubmit(typeof isAnonymous === 'boolean' ? { anonymous: isAnonymous, isAnonymous } : undefined);
   };
 
   if (!visible) return null;

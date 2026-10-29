@@ -10,7 +10,7 @@ import { ContentFeaturedWidget } from './ContentFeaturedWidget';
 import { ChaplainRosterWidget } from './ChaplainRosterWidget';
 import { ConfidentialityBanner } from '../common';
 import { ContentCommentsModal } from '../content/ContentCommentsModal';
-import CallIntakeModal from '../duty/CallIntakeModal';
+import CallIntakeModal from '../duty/CallIntakeModalPreview';
 import NoChaplainAvailableModal from '../duty/NoChaplainAvailableModal';
 import { getPerlitaDelDia, getRandomPerlita } from '../../lib/api/bible';
 import { getDeterministicForcePerlita, getRandomForcePerlita } from '../../data/perlitasData';
@@ -463,6 +463,7 @@ export function SharedDashboardWidgets({
       <CallIntakeModal
         visible={showIntakeModal}
         sessionType={selectedType}
+        isAnonymous={useCallStore.getState().isAnonymous}
         onClose={() => setShowIntakeModal(false)}
         isSubmitting={callStatus === 'REQUESTING'}
         onSubmit={async (intake?: CallIntake) => {

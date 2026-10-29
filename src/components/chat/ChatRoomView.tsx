@@ -74,21 +74,40 @@ export function ChatRoomView({
   const stompRef = useRef<ChatStompService | null>(null);
   const user = useAuthStore((state) => state.user);
   const token = useAuthStore((state) => state.token);
+  const [remoteCallerName, setRemoteCallerName] = useState<string | null>(null);
 
-  const displayTitle = isChaplainMode ? comradeName : chaplainName;
+  const rawCallerName =
+    (comradeName && comradeName !== 'Camarada en Consulta' ? comradeName : null) ||
+    remoteCallerName ||
+    messages.find((m) => m.senderRole !== 'CHAPLAIN' && m.senderName)?.senderName ||
+    null;
+
+  const isCallerAnonymous =
+    !rawCallerName ||
+    rawCallerName.startsWith('Invitado') ||
+    rawCallerName === 'Anónimo' ||
+    rawCallerName === 'Camarada Anónimo';
+
+  const resolvedComradeName = isCallerAnonymous ? 'Anónimo' : rawCallerName!;
+  const displayTitle = isChaplainMode ? resolvedComradeName : chaplainName;
   const displaySubtitle = isChaplainMode
     ? 'cAPPellan · Canal de Acompañamiento'
     : 'cAPPellan · Confidencial';
 
-  const [isAnonymousUser, setIsAnonymousUser] = useState(false);
+  const [isAnonymousUser, setIsAnonymousUser] = useState(useCallStore.getState().isAnonymous);
+  const [profileFullName, setProfileFullName] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     if (!isChaplainMode && user) {
       getMyBasicProfile()
         .then((profile) => {
-          if (isMounted && profile?.isAnonymous) {
-            setIsAnonymousUser(true);
+          if (!isMounted || !profile) return;
+          if (typeof profile.isAnonymous === 'boolean') {
+            setIsAnonymousUser(profile.isAnonymous);
+          }
+          if (profile.fullName && profile.fullName.trim().length > 0) {
+            setProfileFullName(profile.fullName.trim());
           }
         })
         .catch(() => {});
@@ -100,15 +119,15 @@ export function ChatRoomView({
 
   const mySenderRole: ChatSenderRole = isChaplainMode
     ? 'CHAPLAIN'
-    : user
+    : user && !isAnonymousUser
     ? 'BASIC'
     : 'GUEST';
 
   const mySenderName = isChaplainMode
     ? user?.username || 'Capellán'
     : isAnonymousUser
-    ? 'Oficial Reservado'
-    : user?.username || 'Anónimo';
+    ? 'Anónimo'
+    : profileFullName || user?.username || 'Usuario';
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -219,6 +238,9 @@ export function ChatRoomView({
     })
       .then((detail) => {
         if (isCancelled) return;
+        if (detail?.callerName) {
+          setRemoteCallerName(detail.callerName);
+        }
         if (!detail || detail.status === 'ENDED') {
           handleRemoteSessionEnded();
         } else if (detail.status === 'WAITING') {
@@ -264,12 +286,13 @@ export function ChatRoomView({
             return prev;
           }
           // If an optimistic message matches, replace it seamlessly
+          const isIncomingFromChaplain = msg.senderRole === 'CHAPLAIN';
           const optIndex = prev.findIndex(
             (p) =>
               p.id &&
               p.id < 0 &&
               p.content === msg.content &&
-              p.senderRole === msg.senderRole
+              (p.senderRole === 'CHAPLAIN') === isIncomingFromChaplain
           );
           if (optIndex >= 0) {
             const next = [...prev];

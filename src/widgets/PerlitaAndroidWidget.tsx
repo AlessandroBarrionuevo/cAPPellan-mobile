@@ -1,5 +1,8 @@
 import React from 'react';
-import { FlexWidget, TextWidget } from 'react-native-android-widget';
+import {
+  FlexWidget,
+  TextWidget,
+} from 'react-native-android-widget';
 import type { Perlita } from '../types/bible';
 
 export interface PerlitaAndroidWidgetProps {
@@ -7,8 +10,33 @@ export interface PerlitaAndroidWidgetProps {
   isRandom?: boolean;
 }
 
+const MONTHS_ES = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+function formatWidgetDate(dateStr?: string): string {
+  if (dateStr && dateStr.trim().length > 0) {
+    return dateStr;
+  }
+  const now = new Date();
+  return `${MONTHS_ES[now.getMonth()]}, ${now.getDate()}`;
+}
+
 /**
- * Native Android Home Screen Widget for the Daily Perlita (RemoteViews via JSX).
+ * Native Android Home Screen Widget for the Daily Perlita.
+ * Clean, lightweight layout without dummy counters or overlapping click captures.
+ * Header features an isolated, direct '↻ Otro' refresh trigger.
  */
 export function PerlitaAndroidWidget({
   perlita,
@@ -18,8 +46,7 @@ export function PerlitaAndroidWidget({
     perlita?.text ||
     'Mira que te mando que te esfuerces y seas valiente; no temas ni desmayes, porque el Señor tu Dios estará contigo en cada servicio, patrulla y misión.';
   const referenceText = perlita?.reference || 'Josué 1:9';
-  const attributionText =
-    perlita?.attribution || perlita?.theme || 'Capellanía · Guardia Activa';
+  const displayDate = formatWidgetDate(perlita?.date);
 
   return (
     <FlexWidget
@@ -28,26 +55,25 @@ export function PerlitaAndroidWidget({
         width: 'match_parent',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        padding: 14,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#1E3A5F',
-        backgroundGradient: {
-          from: '#0B192C',
-          to: '#162942',
-          orientation: 'TL_BR',
-        },
+        borderColor: '#CBD5E1',
+        backgroundColor: '#FFFFFF',
       }}
       accessibilityLabel="Widget de Perlita del Día de CapellanAPP"
     >
-      {/* Top Header Row: Badge + Refresh Action */}
+      {/* 1. Header Bar: Tactical Blue #0c7ae0 with isolated Refresh Action */}
       <FlexWidget
         style={{
           width: 'match_parent',
+          height: 32,
+          backgroundColor: '#0c7ae0',
+          borderTopLeftRadius: 15,
+          borderTopRightRadius: 15,
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 4,
+          paddingHorizontal: 12,
         }}
       >
         <FlexWidget
@@ -55,71 +81,72 @@ export function PerlitaAndroidWidget({
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#1E3A5F',
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 6,
+            paddingVertical: 4,
           }}
         >
           <TextWidget
             text={isRandom ? '✦ PERLITA DE GUARDIA' : '✦ PERLITA DEL DÍA'}
             style={{
-              fontSize: 10,
+              fontSize: 10.5,
               fontWeight: 'bold',
-              color: '#38BDF8',
-              letterSpacing: 0.4,
+              color: '#FFFFFF',
+              letterSpacing: 0.8,
             }}
           />
         </FlexWidget>
 
+        {/* Dedicated, isolated refresh button without parent overlay conflict */}
         <FlexWidget
           clickAction="REFRESH_PERLITA"
-          accessibilityLabel="Cambiar por otra perlita"
+          accessibilityLabel="Cambiar por otro versículo"
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#1E293B',
-            paddingHorizontal: 9,
-            paddingVertical: 3,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: '#334155',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(255, 255, 255, 0.28)',
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 7,
           }}
         >
           <TextWidget
-            text="↻ Otra"
+            text="↻ Otro"
+            clickAction="REFRESH_PERLITA"
             style={{
-              fontSize: 10,
+              fontSize: 10.5,
               fontWeight: 'bold',
-              color: '#E2E8F0',
+              color: '#FFFFFF',
             }}
           />
         </FlexWidget>
       </FlexWidget>
 
-      {/* Center Quote Body (Opens App on tap) */}
+      {/* 2. Main Quote Body (Opens App on Tap) */}
       <FlexWidget
         clickAction="OPEN_APP"
         style={{
           width: 'match_parent',
           flex: 1,
+          flexDirection: 'column',
           justifyContent: 'center',
-          paddingVertical: 4,
+          paddingHorizontal: 14,
+          paddingVertical: 6,
         }}
       >
         <TextWidget
           text={`“${verseText}”`}
-          maxLines={4}
+          maxLines={3}
           truncate="END"
           style={{
-            fontSize: 13,
-            fontWeight: '600',
-            color: '#F8FAFC',
+            fontSize: 12.5,
+            fontWeight: 'bold',
+            color: '#0F2438',
+            lineSpacingExtra: 1,
           }}
         />
       </FlexWidget>
 
-      {/* Bottom Footer Row: Scripture Reference + Attribution */}
+      {/* 3. Footer Row: Scripture Reference & Date ONLY (No dummy icons) */}
       <FlexWidget
         clickAction="OPEN_APP"
         style={{
@@ -127,28 +154,29 @@ export function PerlitaAndroidWidget({
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: 6,
+          paddingHorizontal: 14,
+          paddingBottom: 8,
+          paddingTop: 4,
           borderTopWidth: 1,
-          borderTopColor: '#1E3A5F',
+          borderTopColor: '#F1F5F9',
         }}
       >
         <TextWidget
-          text={referenceText}
+          text={`— ${referenceText}`}
           maxLines={1}
           truncate="END"
           style={{
             fontSize: 11,
             fontWeight: 'bold',
-            color: '#F59E0B',
+            color: '#0c7ae0',
           }}
         />
+
         <TextWidget
-          text={attributionText}
-          maxLines={1}
-          truncate="END"
+          text={displayDate}
           style={{
-            fontSize: 10,
-            color: '#94A3B8',
+            fontSize: 10.5,
+            color: '#64748B',
           }}
         />
       </FlexWidget>

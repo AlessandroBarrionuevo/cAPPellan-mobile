@@ -11,7 +11,11 @@
     </service>
     <receiver
       android:name="com.cappellan.incomingcall.IncomingCallActionReceiver"
-      android:exported="false" />
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.cappellan.incomingcall.ACTION_REJECT" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>
 <!-- [ROLLBACK-POINT-FULLSCREEN-INTENT-MANIFEST-END] -->

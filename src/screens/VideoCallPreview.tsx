@@ -56,7 +56,15 @@ import {
   X,
   Radio,
   Sparkles,
+  User,
+  UserX,
+  UserCheck,
 } from 'lucide-react-native';
+import {
+  stopIncomingCallVibration,
+  dismissIncomingCallNotifications,
+} from '../lib/notifications';
+import { dismissNativeIncomingCall } from '../../modules/incoming-call';
 
 export interface VideoCallPreviewProps {
   onCallEnded: () => void;
@@ -292,15 +300,58 @@ function ActiveVideoCallViewport({
   const assignedCall = useChaplainStore((state) => state.assignedCall);
   const user = useAuthStore((state) => state.user);
 
-  const session = currentSession || assignedCall;
   const isChaplainRole =
     user?.role === 'CHAPLAIN' ||
     user?.role === 'CHAPLAIN_LEADER' ||
     user?.role === 'SUPERUSER';
+  const session = isChaplainRole
+    ? (assignedCall || currentSession)
+    : (currentSession || assignedCall);
 
   const hasRemote = remoteParticipants.length > 0;
   const remoteParticipant = hasRemote ? remoteParticipants[0] : null;
   const [isRemoteSpeaking, setIsRemoteSpeaking] = useState(false);
+
+  // Ensure all incoming call vibrations and native notifications are completely silenced on entry
+  useEffect(() => {
+    stopIncomingCallVibration();
+    dismissIncomingCallNotifications();
+    if (session?.sessionId) {
+      dismissNativeIncomingCall(session.sessionId);
+    }
+    dismissNativeIncomingCall(1001);
+  }, [session?.sessionId]);
+
+  // Determine if the participant being attended is anonymous or has a real name
+  const participantInfo = useMemo(() => {
+    // 1. Explicit anonymity flag in session intake
+    if (session?.intake?.anonymous === true) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    const rawFromSession = session?.callerName?.trim();
+    const rawFromRemote = remoteParticipant?.name?.trim();
+    const rawFromIdentity = remoteParticipant?.identity?.trim();
+
+    const candidate = rawFromSession || rawFromRemote || rawFromIdentity || '';
+
+    if (!candidate) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    const lower = candidate.toLowerCase();
+    const isAnon =
+      lower.startsWith('invitado') ||
+      lower.includes('anónimo') ||
+      lower.includes('anonimo') ||
+      lower.startsWith('guest');
+
+    if (isAnon) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    return { isAnonymous: false, displayName: candidate };
+  }, [session?.callerName, session?.intake?.anonymous, remoteParticipant?.name, remoteParticipant?.identity]);
 
   useEffect(() => {
     if (!remoteParticipant) {
@@ -460,6 +511,19 @@ function ActiveVideoCallViewport({
           {/* Subtle gradient vignette at top and bottom for readability */}
           <View style={styles.topVignette} pointerEvents="none" />
           <View style={styles.bottomVignette} pointerEvents="none" />
+
+          {/* Floating participant tag inside video stream */}
+          {isChaplainRole && (
+            <View style={styles.videoOverlayParticipantChip}>
+              <View style={participantInfo.isAnonymous ? styles.anonDot : styles.namedDot} />
+              <Text style={styles.videoOverlayParticipantText}>
+                {participantInfo.isAnonymous ? 'Anónimo' : participantInfo.displayName}
+              </Text>
+              {isRemoteSpeaking && (
+                <Volume2 size={12} color="#34D399" style={{ marginLeft: 4 }} />
+              )}
+            </View>
+          )}
         </View>
       ) : (
         /* Fallbacks when remote participant has camera turned OFF */
@@ -470,7 +534,34 @@ function ActiveVideoCallViewport({
                App logo in center + inspiring phrase for chaplain. */
             <View style={styles.fallbackCenterContent}>
               <View style={styles.emblemContainer}>
-                <InstitutionalEmblem size={96} />
+                <InstitutionalEmblem size={84} />
+              </View>
+
+              {/* Cartel de Participante Atendido */}
+              <View style={styles.attendedPersonContainer}>
+                <Text style={styles.attendedPersonLabel}>Llamada de:</Text>
+                <View
+                  style={[
+                    styles.attendedPersonBadge,
+                    participantInfo.isAnonymous
+                      ? styles.attendedPersonBadgeAnon
+                      : styles.attendedPersonBadgeNamed,
+                  ]}
+                >
+                  {participantInfo.isAnonymous ? (
+                    <>
+                      <UserX size={15} color="#FBBF24" />
+                      <Text style={styles.attendedPersonTextAnon}>Anónimo</Text>
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck size={15} color="#34D399" />
+                      <Text style={styles.attendedPersonTextNamed}>
+                        {participantInfo.displayName}
+                      </Text>
+                    </>
+                  )}
+                </View>
               </View>
 
               <View style={styles.chaplainInspireBox}>
@@ -536,14 +627,22 @@ function ActiveVideoCallViewport({
         ]}
       >
         <View style={styles.topHeaderLeft}>
-          {/* Timer pill badge: [ 🔴 00:08:23 ] */}
-          <View style={styles.timerPill}>
-            <View style={styles.timerRedDot} />
-            <Text style={styles.timerText}>{formatTimerHMS(callDuration)}</Text>
+          {/* Header Row: Timer & Participant Cartel Badge */}
+          <View style={styles.headerInfoRow}>
+            {/* Timer pill badge: [ 🔴 00:08:23 ] */}
+            <View style={styles.timerPill}>
+              <View style={styles.timerRedDot} />
+              <Text style={styles.timerText}>{formatTimerHMS(callDuration)}</Text>
+            </View>
+
+            {/* Cartel de Participante (Anónimo / Nombre) */}
+            {isChaplainRole && (
+              <></>
+            )}
           </View>
 
           {/* Contextual questions / pastoral inquiry guide matching image design */}
-          <View style={styles.inquiryBox}>
+          {/* <View style={styles.inquiryBox}>
             <Text style={styles.inquiryHeader}>
               {isChaplainRole ? 'Total 6 preguntas • Guía pastoral' : ''}
             </Text>
@@ -557,7 +656,7 @@ function ActiveVideoCallViewport({
                 ? '4 ¿Podés compartir cómo te sentís espiritualmente?'
                 : ''}
             </Text>
-          </View>
+          </View> */}
         </View>
 
         {/* 3. TOP RIGHT: Picture-in-Picture (PiP) Local Video Card with Flip Button */}
@@ -739,10 +838,34 @@ export default function VideoCallPreview({ onCallEnded, onOpenChat }: VideoCallP
 
       const currentSession = useCallStore.getState().currentSession;
       const assignedCall = useChaplainStore.getState().assignedCall;
-      const session = currentSession || assignedCall;
+      const currentUser = useAuthStore.getState().user;
+      const isChaplainRoleCheck =
+        currentUser?.role === 'CHAPLAIN' ||
+        currentUser?.role === 'CHAPLAIN_LEADER' ||
+        currentUser?.role === 'SUPERUSER';
+      const session = isChaplainRoleCheck
+        ? (assignedCall || currentSession)
+        : (currentSession || assignedCall);
 
       if (session?.token) {
         setToken(session.token);
+        if (session.sessionId && !session.callerName) {
+          request<any>(ENDPOINTS.CALL_DETAIL(session.sessionId))
+            .then((detail) => {
+              if (detail?.callerName || detail?.intake) {
+                const updated: CallResponse = {
+                  ...session,
+                  callerName: detail.callerName || session.callerName,
+                  intake: detail.intake || session.intake,
+                };
+                useCallStore.getState().setSession(updated);
+                if (isChaplainRoleCheck) {
+                  useChaplainStore.getState().setAssignedCall(updated);
+                }
+              }
+            })
+            .catch(() => {});
+        }
       } else if (session?.sessionId) {
         const res = await request<CallResponse>(
           ENDPOINTS.CALLS_RECONNECT(session.sessionId),
@@ -751,6 +874,16 @@ export default function VideoCallPreview({ onCallEnded, onOpenChat }: VideoCallP
         if (res.token) {
           setToken(res.token);
           if (res.clientToken) setClientToken(res.clientToken);
+          const updated: CallResponse = {
+            ...session,
+            ...res,
+            callerName: res.callerName || session.callerName,
+            intake: res.intake || session.intake,
+          };
+          useCallStore.getState().setSession(updated);
+          if (isChaplainRoleCheck) {
+            useChaplainStore.getState().setAssignedCall(updated);
+          }
         } else {
           throw new Error('No se recibió el token de enlace para la sala.');
         }
@@ -898,6 +1031,7 @@ export default function VideoCallPreview({ onCallEnded, onOpenChat }: VideoCallP
         initialVideo={true}
         onCallEnded={onCallEnded}
         isChaplainRole={isChaplainRole}
+        callerName={currentSession?.callerName || assignedCall?.callerName || undefined}
       />
     );
   }
@@ -1088,7 +1222,118 @@ const styles = StyleSheet.create({
   },
   topHeaderLeft: {
     flex: 1,
-    maxWidth: 240,
+    maxWidth: 270,
+  },
+  headerInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  participantCartel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    maxWidth: 160,
+  },
+  participantCartelAnon: {
+    backgroundColor: 'rgba(245, 158, 11, 0.22)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(245, 158, 11, 0.55)',
+  },
+  participantCartelNamed: {
+    backgroundColor: 'rgba(16, 185, 129, 0.22)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(16, 185, 129, 0.55)',
+  },
+  participantCartelAnonText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 11,
+    color: '#FBBF24',
+    letterSpacing: 0.3,
+  },
+  participantCartelNamedText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 11,
+    color: '#34D399',
+    letterSpacing: 0.2,
+  },
+  videoOverlayParticipantChip: {
+    position: 'absolute',
+    bottom: 96,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(11, 25, 44, 0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 5,
+  },
+  videoOverlayParticipantText: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: '#F8FAFC',
+  },
+  anonDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#FBBF24',
+  },
+  namedDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#34D399',
+  },
+  attendedPersonContainer: {
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  attendedPersonLabel: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.65)',
+    marginBottom: 5,
+  },
+  attendedPersonBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+  },
+  attendedPersonBadgeAnon: {
+    backgroundColor: 'rgba(245, 158, 11, 0.22)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(245, 158, 11, 0.55)',
+  },
+  attendedPersonBadgeNamed: {
+    backgroundColor: 'rgba(16, 185, 129, 0.22)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(16, 185, 129, 0.55)',
+  },
+  attendedPersonTextAnon: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 14,
+    color: '#FBBF24',
+    letterSpacing: 0.4,
+  },
+  attendedPersonTextNamed: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 14,
+    color: '#34D399',
+    letterSpacing: 0.3,
   },
   timerPill: {
     flexDirection: 'row',
@@ -1101,7 +1346,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     gap: 7,
-    marginBottom: 10,
   },
   timerRedDot: {
     width: 8,

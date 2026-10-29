@@ -2,8 +2,10 @@ import { Platform, Vibration } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { request } from './api/client';
 import { ENDPOINTS } from './api/endpoints';
+import { useAuthStore } from './stores/auth';
 
 let cachedDeviceToken: string | null = null;
+let cachedUserId: number | null = null;
 
 // Global foreground notification handler
 Notifications.setNotificationHandler({
@@ -13,6 +15,25 @@ Notifications.setNotificationHandler({
     const isPerlitaLockscreen =
       data?.type === 'PERLITA_LOCKSCREEN' ||
       data?.type === 'PERLITA_LOCKSCREEN_DAILY';
+
+    if (isIncomingCall) {
+      const user = useAuthStore.getState().user;
+      const isStaff =
+        user?.role === 'CHAPLAIN' ||
+        user?.role === 'CHAPLAIN_LEADER' ||
+        user?.role === 'CHAPLAIN_CONTENT_LEADER' ||
+        user?.role === 'SUPERUSER';
+
+      if (!isStaff) {
+        return {
+          shouldShowAlert: false,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+          shouldShowBanner: false,
+          shouldShowList: false,
+        };
+      }
+    }
 
     if (isPerlitaLockscreen) {
       return {
@@ -149,6 +170,19 @@ export async function setupNotificationChannels(): Promise<void> {
  */
 export async function registerDevicePushToken(): Promise<string | null> {
   try {
+    const user = useAuthStore.getState().user;
+    const isStaff =
+      user?.role === 'CHAPLAIN' ||
+      user?.role === 'CHAPLAIN_LEADER' ||
+      user?.role === 'CHAPLAIN_CONTENT_LEADER' ||
+      user?.role === 'SUPERUSER';
+
+    if (!isStaff) {
+      console.log('[Notifications] Non-chaplain user logged in. Skipping CALL push token registration and unregistering token if present.');
+      await unregisterDevicePushToken();
+      return null;
+    }
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -173,7 +207,7 @@ export async function registerDevicePushToken(): Promise<string | null> {
       return null;
     }
 
-    if (token === cachedDeviceToken) {
+    if (token === cachedDeviceToken && cachedUserId === user?.userId) {
       return token;
     }
 
@@ -188,7 +222,8 @@ export async function registerDevicePushToken(): Promise<string | null> {
     });
 
     cachedDeviceToken = token;
-    console.log('[Notifications] Device token registered successfully with backend.');
+    cachedUserId = user?.userId ?? null;
+    console.log('[Notifications] Device token registered successfully with backend for chaplain ID:', user?.userId);
     return token;
   } catch (err) {
     console.warn('[Notifications] Failed to register device push token:', err);
@@ -222,7 +257,8 @@ export async function unregisterDevicePushToken(): Promise<void> {
       }),
     });
     cachedDeviceToken = null;
-    console.log('[Notifications] Device token removed on logout.');
+    cachedUserId = null;
+    console.log('[Notifications] Device token removed on logout/role switch.');
   } catch (err) {
     console.warn('[Notifications] Failed to unregister device push token:', err);
   }

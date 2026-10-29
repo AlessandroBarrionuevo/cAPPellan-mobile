@@ -305,17 +305,26 @@ export async function widgetTaskHandler(
     }
 
     case 'WIDGET_CLICK': {
-      if (clickAction === 'REFRESH_PERLITA') {
+      if (clickAction === 'REFRESH_PERLITA' || clickAction === 'REFRESH') {
         const randomPerlita = getRandomForcePerlita();
-        await saveStoredWidgetPerlita(randomPerlita, true);
-        renderWidget(
-          <PerlitaAndroidWidget perlita={randomPerlita} isRandom={true} />
-        );
-
-        const lockScreenActive = await isLockScreenPerlitaEnabled();
-        if (lockScreenActive) {
-          await publishPerlitaToLockScreen(randomPerlita, true);
+        try {
+          renderWidget(
+            <PerlitaAndroidWidget perlita={randomPerlita} isRandom={true} />
+          );
+        } catch (renderErr) {
+          console.warn('[PerlitaWidget] Error rendering widget on click:', renderErr);
         }
+
+        try {
+          await saveStoredWidgetPerlita(randomPerlita, true);
+        } catch {}
+
+        try {
+          const lockScreenActive = await isLockScreenPerlitaEnabled();
+          if (lockScreenActive) {
+            await publishPerlitaToLockScreen(randomPerlita, true);
+          }
+        } catch {}
       }
       break;
     }

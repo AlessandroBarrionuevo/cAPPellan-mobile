@@ -117,7 +117,9 @@ export default function IncomingSessionModal({
               )}
             </View>
 
-            <Text style={styles.title}>Consulta Reservada en Espera</Text>
+            <Text style={styles.title}>
+              {session.callerName || (isVideo ? 'Consulta de Guardia en Espera' : 'Solicitud de Chat de Guardia')}
+            </Text>
 
             <View style={styles.sessionTypeBadge}>
               <Text style={styles.sessionTypeBadgeText}>
@@ -216,7 +218,7 @@ export default function IncomingSessionModal({
               onPress={onReject}
               activeOpacity={0.8}
             >
-              <Text style={styles.rejectBtnText}>Reasignar guardia / Postergar</Text>
+              <Text style={styles.rejectBtnText}>Descartar o Cancelar Llamada</Text>
             </TouchableOpacity>
           </View>
         </View>

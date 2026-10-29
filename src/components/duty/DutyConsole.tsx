@@ -39,6 +39,7 @@ import {
 import { request } from '../../lib/api/client';
 import { ENDPOINTS } from '../../lib/api/endpoints';
 import type { CallResponse, SessionType, AuthUser, PostCallReport, ReportStats } from '../../types/api';
+import type { Prayer, PaginatedPrayersResponse } from '../../types/prayer';
 import ChaplainDutyCardBanner from './ChaplainDutyCardBanner';
 
 export interface DutyConsoleProps {
@@ -83,8 +84,11 @@ export default function DutyConsole({
   const [internalReports, setInternalReports] = useState<PostCallReport[]>([]);
   const [internalStats, setInternalStats] = useState<ReportStats | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [latestPrayer, setLatestPrayer] = useState<Prayer | null>(null);
+  const [totalPrayersCount, setTotalPrayersCount] = useState<number>(0);
+  const [isLoadingPrayers, setIsLoadingPrayers] = useState(false);
 
-  // Dynamic fetch of real reports and real stats from backend
+  // Dynamic fetch of real reports, stats, and prayer wall from backend
   const loadDutyData = useCallback(async () => {
     setIsLoadingReports(true);
     try {
@@ -105,6 +109,30 @@ export default function DutyConsole({
       console.warn('[DutyConsole] Error fetching stats:', err);
     } finally {
       setIsLoadingReports(false);
+    }
+
+    try {
+      setIsLoadingPrayers(true);
+      const prayersRes = await request<PaginatedPrayersResponse>(`${ENDPOINTS.PRAYERS}?page=0&size=5`);
+      if (prayersRes) {
+        if (Array.isArray(prayersRes)) {
+          setTotalPrayersCount((prayersRes as any[]).length);
+          if ((prayersRes as any[]).length > 0) setLatestPrayer(prayersRes[0]);
+        } else if (Array.isArray(prayersRes.content)) {
+          setTotalPrayersCount(
+            typeof prayersRes.totalElements === 'number'
+              ? prayersRes.totalElements
+              : prayersRes.content.length
+          );
+          if (prayersRes.content.length > 0) {
+            setLatestPrayer(prayersRes.content[0]);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[DutyConsole] Error fetching community prayers:', err);
+    } finally {
+      setIsLoadingPrayers(false);
     }
   }, []);
 
@@ -221,91 +249,7 @@ export default function DutyConsole({
         </View>
       )}
 
-      {/* 2. Live Dispatch Radar Capsule */}
-      {incomingCall ? (
-        <View style={[styles.dispatchCapsule, styles.dispatchCapsuleActive]}>
-          <View style={styles.dispatchHeader}>
-            <View style={styles.alertBadge}>
-              <Animated.View
-                style={[
-                  styles.alertDot,
-                  { transform: [{ scale: pulseAnim }] },
-                ]}
-              />
-              <Text style={styles.alertBadgeText}>DESPACHO INMEDIATO</Text>
-            </View>
-            <Text style={styles.alertTimeText}>Espera: 14 seg</Text>
-          </View>
-
-          <Text style={styles.dispatchTitle}>
-            {incomingCall.callerName || (incomingCall.sessionType === 'CHAT' ? 'Solicitud de Chat' : 'Consulta en Espera')}
-          </Text>
-          <Text style={styles.dispatchDesc}>
-            {incomingCall.callerName && !incomingCall.callerName.toLowerCase().startsWith('invitado')
-              ? 'Llamada con identidad identificada · Atención pastoral directa.'
-              : 'Personal en servicio · Identidad reservada bajo fuero ministerial.'}
-          </Text>
-
-          {/* Action Buttons: 1-Tap Dual Choice */}
-          <View style={styles.dispatchActions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnVideo]}
-              onPress={() => onAcceptCall && onAcceptCall('VIDEO')}
-              activeOpacity={0.85}
-            >
-              <Video size={18} color="#FFFFFF" />
-              <Text style={styles.actionBtnText}>Videollamada</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnChat]}
-              onPress={() => onAcceptCall && onAcceptCall('CHAT')}
-              activeOpacity={0.85}
-            >
-              <MessageSquare size={18} color="#FFFFFF" />
-              <Text style={styles.actionBtnText}>Chat Escrito</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : (
-        <TouchableOpacity
-          style={isOnline ? styles.listeningCapsule : styles.offlineCapsule}
-          onPress={() => onToggleOnline && onToggleOnline(!isOnline)}
-          activeOpacity={0.85}
-          disabled={isToggling}
-        >
-          {isToggling ? (
-            <ActivityIndicator
-              size="small"
-              color={isOnline ? '#059669' : Theme.colors.outline}
-            />
-          ) : isOnline ? (
-            <>
-              <View style={styles.listeningIconBox}>
-                <Radio size={20} color="#059669" />
-              </View>
-              <View style={styles.listeningTextCol}>
-                <Text style={styles.listeningTitle}>Guardia Activa · Radar Escucha</Text>
-                <Text style={styles.listeningSub}>
-                  Terminal en alerta de alta disponibilidad para recibir videollamadas o mensajes.
-                </Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.offlineIconBox}>
-                <WifiOff size={20} color={Theme.colors.outline} />
-              </View>
-              <View style={styles.offlineTextCol}>
-                <Text style={styles.offlineTitle}>Fuera de Guardia</Text>
-                <Text style={styles.offlineSub}>
-                  Toca aquí para ponerte en servicio y recibir solicitudes.
-                </Text>
-              </View>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
+      
 
       {/* 2b. Chaplain Duty Card Banner (Visual inspired by photo - keeping existing intact) */}
       {!incomingCall && (
@@ -388,8 +332,8 @@ export default function DutyConsole({
         </View>
       )}
       */}
-      {/* 3. Notched Operational Overview Card (Fintech / Notch Design) */}
-      <View
+      {/* SECOND CARD DESIGN STYLE */}
+      {/* <View
         style={[styles.notchedCardWrapper, globalStyles.shadowSoft]}
         onLayout={(e) => setNotchedCardWidth(e.nativeEvent.layout.width)}
       >
@@ -401,102 +345,69 @@ export default function DutyConsole({
         >
           <Defs>
             <LinearGradient id="notchedCardBlueGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop
-                offset="0%"
-                stopColor={isOnline ? '#0A58CA' : '#25354D'}
-              />
-              <Stop
-                offset="100%"
-                stopColor={isOnline ? '#003FA8' : '#132034'}
-              />
+              <Stop offset="0%" stopColor="#0852CD" />
+              <Stop offset="100%" stopColor="#003FA8" />
             </LinearGradient>
           </Defs>
           <Path d={notchedCardPath} fill="url(#notchedCardBlueGrad)" />
         </Svg>
 
-        {/* Top Content: Title & Subtitle + Actas Badge */}
+       
         <View style={styles.notchedCardTop}>
           <View style={styles.notchedCardHeadlineCol}>
-            <Text style={styles.notchedCardTitleText}>Informes de Guardia</Text>
-            <Text style={styles.notchedCardSubtitleText}>Libro de Guardia y Asistencia</Text>
+            <Text style={styles.notchedCardPrimaryValue}>
+              {totalReportsCount} {totalReportsCount === 1 ? 'Acta' : 'Actas'}
+            </Text>
+            <Text style={styles.notchedCardSubtitle}>
+              {criticalAlertsCount > 0 ? `${criticalAlertsCount} críticas · ` : 'Al día · '}
+              {videoCount} Video · {chatCount} Chat
+            </Text>
           </View>
+          <View style={styles.notchedCardTopIconBadge}>
+            <Radio size={16} color="rgba(255, 255, 255, 0.85)" />
+          </View>
+        </View>
+
+       
+        <View style={[styles.notchedCardBottomLeft, { width: xCut - 24 }]}>
+          <View style={styles.notchedMetaCol}>
+            <Text style={styles.notchedMetaLabel}>TITULAR</Text>
+            <Text style={styles.notchedMetaValue} numberOfLines={1}>
+              {user ? `Cap. ${user.username}` : 'Capellán'}
+            </Text>
+          </View>
+          <View style={styles.notchedMetaCol}>
+            <Text style={styles.notchedMetaLabel}>ÚLTIMO</Text>
+            <Text style={styles.notchedMetaValue} numberOfLines={1}>
+              {latestReport ? formatReportDate(latestReport.createdAt) : (isOnline ? 'En guardia' : 'Fuera turno')}
+            </Text>
+          </View>
+        </View>
+
+       
+        {onOpenNewReport && (
           <View
             style={[
-              styles.notchedActasBadge,
-              isOnline ? styles.notchedActasBadgeOnline : styles.notchedActasBadgeOffline,
+              styles.notchedButtonDock,
+              {
+                left: xCut + 6,
+                top: yCut + 6,
+                width: notchW - 8,
+                height: notchH - 8,
+              },
             ]}
           >
-            <Text style={styles.notchedActasBadgeText}>
-              {totalReportsCount} {totalReportsCount === 1 ? 'acta' : 'actas'}
-            </Text>
+            <TouchableOpacity
+              style={styles.notchedPillBtn}
+              onPress={onOpenNewReport}
+              activeOpacity={0.85}
+            >
+              <Plus size={14} color="#FFFFFF" strokeWidth={2.4} />
+              <Text style={styles.notchedPillBtnText}>Redactar</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Bottom Left: Metadata Columns (Titular & Último Registro) */}
-        <View style={[styles.notchedCardBottomLeft, { width: xCut - 20 }]}>
-          <View style={styles.notchedMetaCol}>
-            <Text style={styles.notchedMetaLabel}>TITULAR DE GUARDIA</Text>
-            <Text style={styles.notchedMetaValue} numberOfLines={1}>
-              {user ? `Cap. ${user.username}` : 'Capellán de Servicio'}
-            </Text>
-          </View>
-          <View style={styles.notchedMetaCol}>
-            <Text style={styles.notchedMetaLabel}>ÚLTIMO REGISTRO</Text>
-            <Text style={styles.notchedMetaValue} numberOfLines={1}>
-              {latestReport ? formatReportDate(latestReport.createdAt) : 'Sin actas'}
-            </Text>
-            {latestReport?.subject ? (
-              <Text style={styles.notchedMetaSubject} numberOfLines={1}>
-                {latestReport.subject}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Bottom Right: Docked Status Pill Button nested inside the Cutout Notch */}
-        <View
-          style={[
-            styles.notchedButtonDock,
-            {
-              left: xCut + 6,
-              top: yCut + 6,
-              width: notchW - 8,
-              height: notchH - 8,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[
-              styles.notchedPillBtn,
-              isOnline ? styles.notchedPillBtnOnline : styles.notchedPillBtnOffline,
-            ]}
-            onPress={() => onToggleOnline && onToggleOnline(!isOnline)}
-            activeOpacity={0.85}
-            disabled={isToggling}
-          >
-            {isToggling ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <View
-                  style={[
-                    styles.notchedPillDot,
-                    isOnline ? styles.notchedPillDotOnline : styles.notchedPillDotOffline,
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.notchedPillBtnText,
-                    isOnline ? styles.notchedPillBtnTextOnline : styles.notchedPillBtnTextOffline,
-                  ]}
-                >
-                  {isOnline ? 'Online' : 'Offline'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+        )}
+      </View> */}
 
       {/* 4. Compact Pastoral Reports Preview (#Sección de Informes) */}
       <View style={[styles.reportsSection, globalStyles.shadowSoft]}>
@@ -553,6 +464,17 @@ export default function DutyConsole({
               return (
                 <View key={report.id || report.sessionId} style={styles.dutyReportCard}>
                   <View style={styles.dutyReportTop}>
+                    <View style={styles.dutyBadgages}>
+                      {report.chaplainUsername && (
+                        <View style={styles.chaplainAuthorBadge}>
+                          <User size={10} color="#0c7ae0" />
+                          <Text style={styles.chaplainAuthorBadgeText} numberOfLines={1}>
+                            {report.chaplainUsername}
+                          </Text>
+                        </View>
+                      )}
+                      
+                    </View>
                     <View style={styles.dutyReportDateRow}>
                       <Text style={styles.dutyReportDate}>
                         {formatReportDate(report.createdAt)}
@@ -578,17 +500,7 @@ export default function DutyConsole({
                       </View>
                       
                     </View>
-                    <View style={styles.dutyBadgages}>
-                      {report.chaplainUsername && (
-                        <View style={styles.chaplainAuthorBadge}>
-                          <User size={10} color="#0c7ae0" />
-                          <Text style={styles.chaplainAuthorBadgeText} numberOfLines={1}>
-                            {report.chaplainUsername}
-                          </Text>
-                        </View>
-                      )}
-                      
-                    </View>
+                    
                   </View>
 
                   {report.subject ? (
@@ -601,25 +513,21 @@ export default function DutyConsole({
                     {report.summary}
                   </Text>
 
-                  <View style={styles.dutyReportSeverityRow}>
+                  <View style={styles.dutyReportBottom}>
                     <View style={styles.guaranteeTag}>
                       <View style={styles.severityRow}>
                         <Text style={styles.severityLabel}>Severidad {report.severity}/5</Text>
                         <View style={[styles.severityDot, { backgroundColor: dotColor }]} />
                       </View>
                     </View>
-                  </View>
 
-                  <TouchableOpacity
-                    style={styles.viewActaFullBtn}
-                    onPress={() => onViewReportDetails && onViewReportDetails(report)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.viewActaIconCircle}>
-                      <ArrowRight size={16} color="#0B1E36" strokeWidth={2.4} />
-                    </View>
-                    <Text style={styles.viewActaFullBtnText}>Ver acta</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => onViewReportDetails && onViewReportDetails(report)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.viewActaBtnText}>Ver acta →</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             })}
@@ -629,46 +537,55 @@ export default function DutyConsole({
         {/* Link to Full Informes Screen */}
         {onNavigateToInformes && (
           <TouchableOpacity
-            style={styles.viewAllReportsRow}
+            style={styles.viewAllReportsBtn}
             onPress={onNavigateToInformes}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <Text style={styles.viewAllReportsText}>Ver todas las actas en bitácora</Text>
-            <ChevronRight size={15} color={Theme.colors.tacticalNavy} />
+            <View style={styles.viewAllReportsIconCircle}>
+              <ArrowRight size={16} color="#0B1E36" strokeWidth={2.4} />
+            </View>
+            <Text style={styles.viewAllReportsBtnText}>Ver todas las actas</Text>
           </TouchableOpacity>
         )}
       </View>
 
       {/* 5. Community Prayer Wall Oversight Snippet (#Muro de Oración) */}
       {onNavigatePrayerWall && (
-        <TouchableOpacity
-          style={[styles.prayerCard, globalStyles.shadowSoft]}
-          onPress={onNavigatePrayerWall}
-          activeOpacity={0.85}
-        >
+        <View style={[styles.prayerCard, globalStyles.shadowSoft]}>
           <View style={styles.prayerHeader}>
             <View style={styles.prayerTitleRow}>
-              <Heart size={16} color="#9A805B" />
               <Text style={styles.prayerTitle}>Intercesión Comunitaria Urgente</Text>
             </View>
             <View style={styles.prayerCountBadge}>
-              <Text style={styles.prayerCountText}>18 activas</Text>
+              <Text style={styles.prayerCountText}>
+                {isLoadingPrayers
+                  ? '...'
+                  : totalPrayersCount > 0
+                  ? `${totalPrayersCount} ${totalPrayersCount === 1 ? 'activa' : 'activas'}`
+                  : 'Sin peticiones'}
+              </Text>
             </View>
           </View>
 
           <View style={styles.prayerContentBox}>
-            <Text style={styles.prayerQuote}>
-              «Por el Cabo 1ro. González en patrulla de alta montaña, fortaleza en la tormenta.»
+            <Text style={styles.prayerQuote} numberOfLines={3}>
+              {latestPrayer
+                ? `«${latestPrayer.description || latestPrayer.title}»`
+                : '«Unidos en la fe y la oración por nuestros camaradas en cada misión y destino.»'}
             </Text>
-            <View style={styles.prayerFooter}>
-              <Text style={styles.prayerComradesCount}>24 camaradas orando</Text>
-              <View style={styles.prayerLink}>
-                <Text style={styles.prayerLinkText}>Unirme en oración</Text>
-                <ArrowRight size={13} color={Theme.colors.tacticalNavy} />
-              </View>
-            </View>
           </View>
-        </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.joinPrayerBtn}
+            onPress={onNavigatePrayerWall}
+            activeOpacity={0.85}
+          >
+            <View style={styles.joinPrayerIconCircle}>
+              <ArrowRight size={16} color="#0B1E36" strokeWidth={2.4} />
+            </View>
+            <Text style={styles.joinPrayerBtnText}>Unirme a oración</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -929,7 +846,7 @@ const styles = StyleSheet.create({
   },
   // 3. Notched Operational Overview Card (Fintech / Notch Design)
   notchedCardWrapper: {
-    height: 185,
+    height: 180,
     width: '100%',
     position: 'relative',
     marginVertical: 4,
@@ -950,51 +867,40 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 18,
     zIndex: 2,
   },
   notchedCardHeadlineCol: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 12,
   },
-  notchedCardTitleText: {
+  notchedCardPrimaryValue: {
     fontFamily: Theme.fonts.headlineBold,
-    fontSize: 18,
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  notchedCardSubtitleText: {
-    fontFamily: Theme.fonts.body,
-    fontSize: 11.5,
-    color: 'rgba(255, 255, 255, 0.75)',
-    marginTop: 2,
-  },
-  notchedActasBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4.5,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  notchedActasBadgeOnline: {
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  notchedActasBadgeOffline: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  notchedActasBadgeText: {
-    fontFamily: Theme.fonts.headlineBold,
-    fontSize: 11,
+    fontSize: 24,
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  notchedCardSubtitle: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.72)',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  notchedCardTopIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notchedCardBottomLeft: {
     position: 'absolute',
     left: 20,
-    bottom: 14,
+    bottom: 16,
     flexDirection: 'row',
-    gap: 14,
+    gap: 16,
     zIndex: 2,
   },
   notchedMetaCol: {
@@ -1002,22 +908,16 @@ const styles = StyleSheet.create({
   },
   notchedMetaLabel: {
     fontFamily: Theme.fonts.headlineBold,
-    fontSize: 9.5,
+    fontSize: 10,
     color: 'rgba(255, 255, 255, 0.65)',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     marginBottom: 3,
   },
   notchedMetaValue: {
     fontFamily: Theme.fonts.headlineBold,
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#FFFFFF',
     letterSpacing: 0.2,
-  },
-  notchedMetaSubject: {
-    fontFamily: Theme.fonts.body,
-    fontSize: 10.5,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 1,
   },
   notchedButtonDock: {
     position: 'absolute',
@@ -1028,21 +928,19 @@ const styles = StyleSheet.create({
   notchedPillBtn: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#12161E',
+    backgroundColor: '#161616',
     borderRadius: 22,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    borderWidth: 1.2,
-  },
-  notchedPillBtnOnline: {
-    borderColor: 'rgba(132, 204, 22, 0.55)',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     ...Platform.select({
       ios: {
-        shadowColor: '#84CC16',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.35,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
         shadowRadius: 5,
       },
       android: {
@@ -1050,41 +948,11 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  notchedPillBtnOffline: {
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
-  },
-  notchedPillDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  notchedPillDotOnline: {
-    backgroundColor: '#84CC16',
-  },
-  notchedPillDotOffline: {
-    backgroundColor: '#94A3B8',
-  },
   notchedPillBtnText: {
     fontFamily: Theme.fonts.headlineBold,
     fontSize: 13,
-    letterSpacing: 0.3,
-  },
-  notchedPillBtnTextOnline: {
     color: '#FFFFFF',
-  },
-  notchedPillBtnTextOffline: {
-    color: '#94A3B8',
+    letterSpacing: 0.3,
   },
   // 3. Shift KPIs
   statsSection: {
@@ -1270,10 +1138,7 @@ const styles = StyleSheet.create({
   },
   dutyReportCard: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
-    paddingHorizontal: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    padding: 12,
   },
   dutyReportTop: {
     flexDirection: 'column',
@@ -1297,6 +1162,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1,
     borderColor: '#DBEAFE',
+    marginBottom: 10,
   },
   chaplainAuthorBadgeText: {
     fontSize: 10,
@@ -1308,8 +1174,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
-    marginTop: 6,
+    marginBottom: 2,
     width: '100%',
   },
   dutyReportMeta: {
@@ -1372,10 +1237,14 @@ const styles = StyleSheet.create({
     color: '#334155',
     marginBottom: 8,
   },
-  dutyReportSeverityRow: {
+  dutyReportBottom: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom:10,
   },
   guaranteeTag: {
     flexDirection: 'row',
@@ -1387,30 +1256,36 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#9A805B',
   },
-  viewActaFullBtn: {
+  viewActaBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.colors.tacticalNavy,
+  },
+  viewAllReportsBtn: {
     width: '100%',
-    height: 44,
+    height: 46,
     backgroundColor: '#0B1E36',
     borderRadius: Theme.roundness.full,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    marginTop: 14,
     ...Platform.select({
       ios: {
         shadowColor: '#0B1E36',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.25,
-        shadowRadius: 4,
+        shadowRadius: 5,
       },
       android: {
-        elevation: 2,
+        elevation: 3,
       },
     }),
   },
-  viewActaIconCircle: {
+  viewAllReportsIconCircle: {
     position: 'absolute',
-    left: 5,
+    left: 6,
     width: 34,
     height: 34,
     borderRadius: 17,
@@ -1418,27 +1293,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  viewActaFullBtnText: {
+  viewAllReportsBtnText: {
     fontFamily: Theme.fonts.headlineBold,
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.3,
-  },
-  viewAllReportsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingTop: 12,
-    marginTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
-  },
-  viewAllReportsText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Theme.colors.tacticalNavy,
   },
   // 5. Prayer Card
   prayerCard: {
@@ -1450,7 +1310,7 @@ const styles = StyleSheet.create({
   },
   prayerHeader: {
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
@@ -1458,6 +1318,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
   },
   prayerTitle: {
     fontFamily: Theme.fonts.headline,
@@ -1494,25 +1355,61 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   prayerFooter: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: '#EAEAEA',
   },
   prayerComradesCount: {
-    fontSize: 10,
+    fontSize: 10.5,
+    fontWeight: '600',
     color: Theme.colors.primaryContainer,
   },
-  prayerLink: {
+  prayerAuthorText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.colors.onSurfaceVariant,
+    maxWidth: 140,
+  },
+  joinPrayerBtn: {
+    width: '100%',
+    height: 46,
+    backgroundColor: '#0B1E36',
+    borderRadius: Theme.roundness.full,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    justifyContent: 'center',
+    position: 'relative',
+    marginTop: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0B1E36',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  prayerLinkText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Theme.colors.tacticalNavy,
+  joinPrayerIconCircle: {
+    position: 'absolute',
+    left: 6,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinPrayerBtnText: {
+    fontFamily: Theme.fonts.headlineBold,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 });

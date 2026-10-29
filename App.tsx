@@ -18,7 +18,7 @@ import {
 import { useAuthStore } from './src/lib/stores/auth';
 import { useCallStore } from './src/lib/stores/call';
 import { useChaplainStore } from './src/lib/stores/chaplain';
-import { request, setClientToken, getAuthToken, ApiError } from './src/lib/api/client';
+import { request, setClientToken, getAuthToken, getApiBaseUrl, ApiError } from './src/lib/api/client';
 import { ENDPOINTS } from './src/lib/api/endpoints';
 import { SseClient } from './src/lib/api/sse';
 import {
@@ -36,6 +36,9 @@ import {
   dismissNativeIncomingCall,
   turnScreenOnAndDismissKeyguard,
   getInitialCallData,
+  consumeLastRejectedSessionId,
+  addIncomingCallRejectedListener,
+  setNativeAuthContext,
 } from './modules/incoming-call';
 import * as Notifications from 'expo-notifications';
 
@@ -90,6 +93,12 @@ export default function App() {
   const logout = useAuthStore((state) => state.logout);
   const checkSession = useAuthStore((state) => state.checkSession);
 
+  const isChaplainStaff =
+    user?.role === 'CHAPLAIN' ||
+    user?.role === 'CHAPLAIN_LEADER' ||
+    user?.role === 'CHAPLAIN_CONTENT_LEADER' ||
+    user?.role === 'SUPERUSER';
+
   // Chaplain & Call states
   const chaplainStatus = useChaplainStore((state) => state.status);
   const assignedCall = useChaplainStore((state) => state.assignedCall);
@@ -125,25 +134,36 @@ export default function App() {
   // Register push token & restore saved duty status when logged in
   useEffect(() => {
     if (isAuthenticated) {
-      registerDevicePushToken();
-      useChaplainStore.getState().restoreStatus();
+      const token = getAuthToken();
+      const baseUrl = getApiBaseUrl();
+      setNativeAuthContext(token, baseUrl, user?.role);
 
-      // Verify Android 14+ Full Screen Intent permission
-      if (Platform.OS === 'android') {
-        const hasPermission = canUseFullScreenIntent();
-        if (!hasPermission) {
-          Alert.alert(
-            'Pantalla Completa de Llamadas',
-            'Para que tu teléfono encienda la pantalla automáticamente durante una llamada de guardia, activa el permiso de notificaciones a pantalla completa.',
-            [
-              { text: 'Más tarde', style: 'cancel' },
-              { text: 'Activar', onPress: () => openFullScreenIntentSettings() },
-            ]
-          );
+      if (isChaplainStaff) {
+        registerDevicePushToken();
+        useChaplainStore.getState().restoreStatus();
+
+        // Verify Android 14+ Full Screen Intent permission
+        if (Platform.OS === 'android') {
+          const hasPermission = canUseFullScreenIntent();
+          if (!hasPermission) {
+            Alert.alert(
+              'Pantalla Completa de Llamadas',
+              'Para que tu teléfono encienda la pantalla automáticamente durante una llamada de guardia, activa el permiso de notificaciones a pantalla completa.',
+              [
+                { text: 'Más tarde', style: 'cancel' },
+                { text: 'Activar', onPress: () => openFullScreenIntentSettings() },
+              ]
+            );
+          }
         }
+      } else {
+        unregisterDevicePushToken();
+        useChaplainStore.getState().clearAssignedCall();
       }
+    } else {
+      setNativeAuthContext(null, null, null);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.role, isChaplainStaff]);
 
   // Native Push Notifications listener (Incoming calls & Cancel calls from backend)
   useEffect(() => {
@@ -152,30 +172,48 @@ export default function App() {
       if (!data) return;
 
       if (data.type === 'INCOMING_CALL') {
+        const currentUser = useAuthStore.getState().user;
+        const currentRole = currentUser?.role;
+        const isStaff =
+          currentRole === 'CHAPLAIN' ||
+          currentRole === 'CHAPLAIN_LEADER' ||
+          currentRole === 'CHAPLAIN_CONTENT_LEADER' ||
+          currentRole === 'SUPERUSER';
+
+        if (!isStaff) {
+          console.warn('[App] Ignoring INCOMING_CALL notification for non-chaplain role:', currentRole);
+          return;
+        }
+
         const isChat = data.sessionType === 'CHAT';
+        const rawCallerName = data.callerName && typeof data.callerName === 'string' && data.callerName.trim().length > 0
+          ? data.callerName.trim()
+          : undefined;
+
+        const existingAssigned = useChaplainStore.getState().assignedCall;
+        const isSameSession = existingAssigned?.sessionId === Number(data.sessionId);
         const assigned: CallResponse = {
+          ...(isSameSession ? existingAssigned : {}),
           sessionId: Number(data.sessionId),
-          sessionType: data.sessionType || 'VIDEO',
-          livekitRoomName: data.livekitRoom,
-          token: data.token,
-          clientToken: data.token,
-          callerName: data.callerName || (isChat ? 'Solicitud de Chat Pastoral' : 'Consulta de Guardia'),
-          intake: data.callerMood ? { moodScore: Number(data.callerMood) } : undefined,
+          sessionType: data.sessionType || existingAssigned?.sessionType || 'VIDEO',
+          livekitRoomName: data.livekitRoom || existingAssigned?.livekitRoomName,
+          token: data.token || existingAssigned?.token,
+          callerName: rawCallerName || existingAssigned?.callerName,
+          intake: existingAssigned?.intake || (data.callerMood ? { moodScore: Number(data.callerMood) } : undefined),
         };
-        startIncomingCallVibration();
-        turnScreenOnAndDismissKeyguard();
+        if (!isSameSession) {
+          startIncomingCallVibration();
+          turnScreenOnAndDismissKeyguard();
+        }
         displayNativeIncomingCall({
           sessionId: assigned.sessionId,
-          callerName: assigned.callerName,
+          callerName: assigned.callerName || (isChat ? 'Solicitud de Chat Pastoral' : 'Consulta de Guardia'),
           sessionType: assigned.sessionType,
           token: assigned.token,
           livekitRoom: assigned.livekitRoomName,
         });
         useChaplainStore.getState().setAssignedCall(assigned);
         useCallStore.getState().setSession(assigned);
-        if (assigned.clientToken) {
-          setClientToken(assigned.clientToken);
-        }
         setShowIncomingModal(true);
       } else if (data.type === 'CANCEL_CALL') {
         stopIncomingCallVibration();
@@ -196,6 +234,19 @@ export default function App() {
     const handleNotificationResponse = async (response: Notifications.NotificationResponse) => {
       const data = response.notification.request.content.data as any;
       if (data?.type === 'INCOMING_CALL') {
+        const currentUser = useAuthStore.getState().user;
+        const currentRole = currentUser?.role;
+        const isStaff =
+          currentRole === 'CHAPLAIN' ||
+          currentRole === 'CHAPLAIN_LEADER' ||
+          currentRole === 'CHAPLAIN_CONTENT_LEADER' ||
+          currentRole === 'SUPERUSER';
+
+        if (!isStaff) {
+          console.warn('[App] Ignoring notification response for non-chaplain role:', currentRole);
+          return;
+        }
+
         const isChat = data.sessionType === 'CHAT';
         if (response.actionIdentifier === 'REJECT') {
           stopIncomingCallVibration();
@@ -210,14 +261,20 @@ export default function App() {
           return;
         }
 
+        const rawCallerName = data.callerName && typeof data.callerName === 'string' && data.callerName.trim().length > 0
+          ? data.callerName.trim()
+          : undefined;
+
+        const existingAssigned = useChaplainStore.getState().assignedCall;
+        const isSameSession = existingAssigned?.sessionId === Number(data.sessionId);
         const assigned: CallResponse = {
+          ...(isSameSession ? existingAssigned : {}),
           sessionId: Number(data.sessionId),
-          sessionType: data.sessionType || 'VIDEO',
-          livekitRoomName: data.livekitRoom,
-          token: data.token,
-          clientToken: data.token,
-          callerName: data.callerName || (isChat ? 'Solicitud de Chat Pastoral' : 'Persona en necesidad'),
-          intake: data.callerMood ? { moodScore: Number(data.callerMood) } : undefined,
+          sessionType: data.sessionType || existingAssigned?.sessionType || 'VIDEO',
+          livekitRoomName: data.livekitRoom || existingAssigned?.livekitRoomName,
+          token: data.token || existingAssigned?.token,
+          callerName: rawCallerName || existingAssigned?.callerName,
+          intake: existingAssigned?.intake || (data.callerMood ? { moodScore: Number(data.callerMood) } : undefined),
         };
 
         if (response.actionIdentifier === 'ACCEPT') {
@@ -237,7 +294,11 @@ export default function App() {
               }
             );
 
-            const finalSession = acceptResponse || assigned;
+            const finalSession: CallResponse = {
+              ...assigned,
+              ...(acceptResponse || {}),
+              callerName: acceptResponse?.callerName || assigned.callerName,
+            };
             useChaplainStore.getState().setAssignedCall(finalSession);
             useCallStore.getState().setSession(finalSession);
             if (finalSession.clientToken) {
@@ -268,18 +329,63 @@ export default function App() {
 
     // Native Intent check for calls opened via FullScreenIntent / Heads-up notification
     const checkIncomingCallIntent = async () => {
+      const currentUser = useAuthStore.getState().user;
+      const currentRole = currentUser?.role;
+      const isStaff =
+        currentRole === 'CHAPLAIN' ||
+        currentRole === 'CHAPLAIN_LEADER' ||
+        currentRole === 'CHAPLAIN_CONTENT_LEADER' ||
+        currentRole === 'SUPERUSER';
+
+      if (!isStaff) return;
+
+      const rejectedId = consumeLastRejectedSessionId();
+      if (rejectedId) {
+        stopIncomingCallVibration();
+        dismissIncomingCallNotifications();
+        dismissNativeIncomingCall(rejectedId);
+        dismissNativeIncomingCall(1001);
+        request(ENDPOINTS.CALL_END(rejectedId), { method: 'POST' }).catch(() => {});
+        setShowIncomingModal(false);
+        useChaplainStore.getState().clearAssignedCall();
+        useCallStore.getState().resetCall();
+        return;
+      }
+
       const callData = getInitialCallData();
       if (!callData || !callData.sessionId) return;
 
       const isChat = callData.sessionType === 'CHAT';
+      const rawCallerName = callData.callerName && typeof callData.callerName === 'string' && callData.callerName.trim().length > 0
+        ? callData.callerName.trim()
+        : undefined;
+
+      const existingAssigned = useChaplainStore.getState().assignedCall;
+      const isSameSession = existingAssigned?.sessionId === Number(callData.sessionId);
       const assigned: CallResponse = {
+        ...(isSameSession ? existingAssigned : {}),
         sessionId: Number(callData.sessionId),
-        sessionType: (callData.sessionType as any) || 'VIDEO',
-        livekitRoomName: callData.livekitRoom,
-        token: callData.token,
-        clientToken: callData.token,
-        callerName: callData.callerName || (isChat ? 'Solicitud de Chat Pastoral' : 'Consulta de Guardia'),
+        sessionType: (callData.sessionType as any) || existingAssigned?.sessionType || 'VIDEO',
+        livekitRoomName: callData.livekitRoom || existingAssigned?.livekitRoomName,
+        token: callData.token || existingAssigned?.token,
+        callerName: rawCallerName || existingAssigned?.callerName,
       };
+
+      if (callData.action === 'REJECT') {
+        stopIncomingCallVibration();
+        dismissIncomingCallNotifications();
+        dismissNativeIncomingCall(assigned.sessionId);
+        dismissNativeIncomingCall(1001);
+        try {
+          await request(ENDPOINTS.CALL_END(assigned.sessionId), { method: 'POST' });
+        } catch (err) {
+          console.warn('[App] Direct intent reject failed:', err);
+        }
+        setShowIncomingModal(false);
+        useChaplainStore.getState().clearAssignedCall();
+        useCallStore.getState().resetCall();
+        return;
+      }
 
       if (callData.action === 'ACCEPT') {
         stopIncomingCallVibration();
@@ -293,7 +399,11 @@ export default function App() {
               headers: { 'X-Device-Channel': 'MOBILE' },
             }
           );
-          const finalSession = acceptResponse || assigned;
+          const finalSession: CallResponse = {
+            ...assigned,
+            ...(acceptResponse || {}),
+            callerName: acceptResponse?.callerName || assigned.callerName,
+          };
           useChaplainStore.getState().setAssignedCall(finalSession);
           useCallStore.getState().setSession(finalSession);
           if (finalSession.clientToken) {
@@ -340,10 +450,35 @@ export default function App() {
 
     const responseSub = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
+    const rejectNativeSub = addIncomingCallRejectedListener((event) => {
+      const currentUser = useAuthStore.getState().user;
+      const currentRole = currentUser?.role;
+      const isStaff =
+        currentRole === 'CHAPLAIN' ||
+        currentRole === 'CHAPLAIN_LEADER' ||
+        currentRole === 'CHAPLAIN_CONTENT_LEADER' ||
+        currentRole === 'SUPERUSER';
+
+      if (!isStaff) return;
+
+      const rejectedSessionId = event?.sessionId;
+      stopIncomingCallVibration();
+      dismissIncomingCallNotifications();
+      if (rejectedSessionId) {
+        dismissNativeIncomingCall(Number(rejectedSessionId));
+        request(ENDPOINTS.CALL_END(Number(rejectedSessionId)), { method: 'POST' }).catch(() => {});
+      }
+      dismissNativeIncomingCall(1001);
+      setShowIncomingModal(false);
+      useChaplainStore.getState().clearAssignedCall();
+      useCallStore.getState().resetCall();
+    });
+
     return () => {
       appStateSub.remove();
       receivedSub.remove();
       responseSub.remove();
+      rejectNativeSub?.remove();
     };
   }, []);
 
@@ -363,18 +498,34 @@ export default function App() {
       if (!assigned || !assigned.sessionId) return;
 
       const currentAssigned = useChaplainStore.getState().assignedCall;
+      const isSameSession = currentAssigned?.sessionId === assigned.sessionId;
+      const mergedAssigned: CallResponse = isSameSession
+        ? {
+            ...currentAssigned,
+            ...assigned,
+            callerName: assigned.callerName || currentAssigned?.callerName,
+            intake: assigned.intake || currentAssigned?.intake,
+            token: assigned.token || currentAssigned?.token,
+            livekitRoomName: assigned.livekitRoomName || currentAssigned?.livekitRoomName,
+          }
+        : assigned;
+
       if (
-        currentAssigned?.sessionId === assigned.sessionId &&
-        currentAssigned?.token === assigned.token
+        isSameSession &&
+        currentAssigned?.token === mergedAssigned.token &&
+        currentAssigned?.callerName === mergedAssigned.callerName &&
+        Boolean(currentAssigned?.intake?.reason) === Boolean(mergedAssigned.intake?.reason)
       ) {
         return;
       }
 
-      startIncomingCallVibration();
-      setAssignedCall(assigned);
-      useCallStore.getState().setSession(assigned);
-      if (assigned.clientToken) {
-        setClientToken(assigned.clientToken);
+      if (!isSameSession) {
+        startIncomingCallVibration();
+      }
+      setAssignedCall(mergedAssigned);
+      useCallStore.getState().setSession(mergedAssigned);
+      if (mergedAssigned.clientToken) {
+        setClientToken(mergedAssigned.clientToken);
       }
       setShowIncomingModal(true);
     };
@@ -523,7 +674,9 @@ export default function App() {
           onPress: async () => {
             stopIncomingCallVibration();
             dismissIncomingCallNotifications();
+            setNativeAuthContext(null, null, null);
             await unregisterDevicePushToken();
+            useChaplainStore.getState().clearAssignedCall();
             logout();
           },
         },
@@ -694,6 +847,10 @@ export default function App() {
           onAccept={async (sessionType: SessionType) => {
             stopIncomingCallVibration();
             dismissIncomingCallNotifications();
+            if (assignedCall?.sessionId) {
+              dismissNativeIncomingCall(assignedCall.sessionId);
+            }
+            dismissNativeIncomingCall(1001);
             if (!assignedCall?.sessionId) return;
 
             try {
@@ -709,10 +866,15 @@ export default function App() {
               );
 
               if (acceptResponse) {
-                setAssignedCall(acceptResponse);
-                useCallStore.getState().setSession(acceptResponse);
-                if (acceptResponse.clientToken) {
-                  setClientToken(acceptResponse.clientToken);
+                const finalSession: CallResponse = {
+                  ...assignedCall,
+                  ...acceptResponse,
+                  callerName: acceptResponse.callerName || assignedCall.callerName,
+                };
+                setAssignedCall(finalSession);
+                useCallStore.getState().setSession(finalSession);
+                if (finalSession.clientToken) {
+                  setClientToken(finalSession.clientToken);
                 }
               }
 
@@ -747,11 +909,14 @@ export default function App() {
           onReject={() => {
             stopIncomingCallVibration();
             dismissIncomingCallNotifications();
-            if (assignedCall?.sessionId) {
-              request(ENDPOINTS.CALL_END(assignedCall.sessionId), { method: 'POST' }).catch((err) =>
+            const sid = assignedCall?.sessionId || useChaplainStore.getState().assignedCall?.sessionId;
+            if (sid) {
+              dismissNativeIncomingCall(sid);
+              request(ENDPOINTS.CALL_END(sid), { method: 'POST' }).catch((err) =>
                 console.warn('[App] Error ending rejected call on backend:', err)
               );
             }
+            dismissNativeIncomingCall(1001);
             setShowIncomingModal(false);
             clearAssignedCall();
             useCallStore.getState().resetCall();

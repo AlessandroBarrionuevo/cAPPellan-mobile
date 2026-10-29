@@ -41,6 +41,7 @@ export interface CloudflareCallRoomProps {
   initialVideo?: boolean;
   onCallEnded: () => void;
   isChaplainRole?: boolean;
+  callerName?: string;
 }
 
 export const CloudflareCallRoom: React.FC<CloudflareCallRoomProps> = ({
@@ -48,7 +49,13 @@ export const CloudflareCallRoom: React.FC<CloudflareCallRoomProps> = ({
   initialVideo = false,
   onCallEnded,
   isChaplainRole = false,
+  callerName,
 }) => {
+  const remoteDisplayName = isChaplainRole
+    ? callerName && !callerName.startsWith('Invitado') && callerName !== 'Anónimo' && callerName !== 'Camarada Anónimo'
+      ? callerName
+      : 'Anónimo'
+    : 'Capellán de Guardia';
   const insets = useAppInsets();
   const { width } = useWindowDimensions();
   const isTablet = width > 500;
@@ -201,7 +208,7 @@ export const CloudflareCallRoom: React.FC<CloudflareCallRoomProps> = ({
                   ]}
                 />
                 <Text style={styles.remoteOverlayName}>
-                  {isChaplainRole ? 'Personal en Consulta' : 'Capellán de Guardia'}
+                  {remoteDisplayName}
                 </Text>
               </View>
 
@@ -253,7 +260,7 @@ export const CloudflareCallRoom: React.FC<CloudflareCallRoomProps> = ({
             </View>
 
             <Text style={styles.chaplainTitle}>
-              {isChaplainRole ? 'Personal en Consulta' : 'Capellán de Guardia'}
+              {remoteDisplayName}
             </Text>
 
             <Text style={styles.chaplainBranchSubtitle}>

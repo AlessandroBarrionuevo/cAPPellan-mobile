@@ -195,6 +195,37 @@ function ActiveCallContentPreview({
   const remoteParticipant = hasRemote ? remoteParticipants[0] : null;
   const [isRemoteSpeaking, setIsRemoteSpeaking] = useState(false);
 
+  // Determine if the participant being attended is anonymous or has a real name
+  const participantInfo = useMemo(() => {
+    // 1. Explicit anonymity flag in session intake
+    if (session?.intake?.anonymous === true) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    const rawFromSession = session?.callerName?.trim();
+    const rawFromRemote = remoteParticipant?.name?.trim();
+    const rawFromIdentity = remoteParticipant?.identity?.trim();
+
+    const candidate = rawFromSession || rawFromRemote || rawFromIdentity || '';
+
+    if (!candidate) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    const lower = candidate.toLowerCase();
+    const isAnon =
+      lower.startsWith('invitado') ||
+      lower.includes('anónimo') ||
+      lower.includes('anonimo') ||
+      lower.startsWith('guest');
+
+    if (isAnon) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    return { isAnonymous: false, displayName: candidate };
+  }, [session?.callerName, session?.intake?.anonymous, remoteParticipant?.name, remoteParticipant?.identity]);
+
   // Audio wave animation values for voice stage
   const waveAnim1 = useRef(new Animated.Value(0.3)).current;
   const waveAnim2 = useRef(new Animated.Value(0.6)).current;
@@ -465,7 +496,9 @@ function ActiveCallContentPreview({
                   ]}
                 />
                 <Text style={styles.remoteOverlayName}>
-                  {isChaplainRole ? 'Personal en Consulta' : 'Capellán de Guardia'}
+                  {isChaplainRole
+                    ? (participantInfo.isAnonymous ? 'Anónimo' : participantInfo.displayName)
+                    : 'Capellán de Guardia'}
                 </Text>
               </View>
 
@@ -519,7 +552,9 @@ function ActiveCallContentPreview({
             </View>
 
             <Text style={styles.chaplainTitle}>
-              {isChaplainRole ? 'Personal en Consulta' : 'Capellán de Guardia'}
+              {isChaplainRole
+                ? (participantInfo.isAnonymous ? 'Consulta Anónima' : participantInfo.displayName)
+                : 'Capellán de Guardia'}
             </Text>
 
             <Text style={styles.chaplainBranchSubtitle}>
@@ -722,6 +757,21 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
 
       if (session?.token) {
         setToken(session.token);
+        if (session.sessionId && !session.callerName) {
+          request<any>(ENDPOINTS.CALL_DETAIL(session.sessionId))
+            .then((detail) => {
+              if (detail?.callerName || detail?.intake) {
+                const updated: CallResponse = {
+                  ...session,
+                  callerName: detail.callerName || session.callerName,
+                  intake: detail.intake || session.intake,
+                };
+                useCallStore.getState().setSession(updated);
+                useChaplainStore.getState().setAssignedCall(updated);
+              }
+            })
+            .catch(() => {});
+        }
       } else if (session?.sessionId) {
         const res = await request<CallResponse>(
           ENDPOINTS.CALLS_RECONNECT(session.sessionId),
@@ -730,6 +780,14 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
         if (res.token) {
           setToken(res.token);
           if (res.clientToken) setClientToken(res.clientToken);
+          const updated: CallResponse = {
+            ...session,
+            ...res,
+            callerName: res.callerName || session.callerName,
+            intake: res.intake || session.intake,
+          };
+          useCallStore.getState().setSession(updated);
+          useChaplainStore.getState().setAssignedCall(updated);
         } else {
           throw new Error('No se recibió el token de enlace para la sala.');
         }
@@ -874,6 +932,7 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
         initialVideo={false}
         onCallEnded={onCallEnded}
         isChaplainRole={isChaplainRole}
+        callerName={currentSession?.callerName || assignedCall?.callerName || undefined}
       />
     );
   }

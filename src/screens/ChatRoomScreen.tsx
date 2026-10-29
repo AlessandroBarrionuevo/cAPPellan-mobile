@@ -38,7 +38,7 @@ export default function ChatRoomScreen({
       clientToken={clientToken}
       isChaplainMode={isChaplainRole}
       chaplainName="Capellán Daniel Godoy"
-      comradeName="Camarada en Consulta"
+      comradeName={session?.callerName || "Camarada en Consulta"}
       onChatEnded={onChatEnded}
       onRequestReport={onRequestReport}
     />

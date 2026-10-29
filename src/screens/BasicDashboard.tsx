@@ -101,7 +101,7 @@ export default function BasicDashboard({
 }: BasicDashboardProps) {
   const { width } = useWindowDimensions();
   const [selectedType, setSelectedType] = useState<SessionType>('VIDEO');
-  const [isAnonymous, setIsAnonymous] = useState(true);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
 
@@ -144,6 +144,7 @@ export default function BasicDashboard({
       .then((profile) => {
         if (isMounted && profile && typeof profile.isAnonymous === 'boolean') {
           setIsAnonymous(profile.isAnonymous);
+          useCallStore.getState().setIsAnonymous(profile.isAnonymous);
         }
       })
       .catch(() => {
@@ -158,8 +159,9 @@ export default function BasicDashboard({
   const handleToggleAnonymity = async () => {
     const nextVal = !isAnonymous;
     setIsAnonymous(nextVal);
+    useCallStore.getState().setIsAnonymous(nextVal);
     try {
-      await updateMyBasicProfile({ isAnonymous: nextVal });
+      await updateMyBasicProfile({ isAnonymous: nextVal, anonymous: nextVal });
     } catch (err) {
       console.warn('[BasicDashboard] Failed to persist anonymity change:', err);
     }
@@ -217,6 +219,22 @@ export default function BasicDashboard({
 
   // Pulse animation for waiting room
   const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  // Smooth switch animation for anonymity toggle
+  const switchAnim = useRef(new Animated.Value(isAnonymous ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(switchAnim, {
+      toValue: isAnonymous ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [isAnonymous, switchAnim]);
+
+  const knobTranslate = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 18],
+  });
 
   useEffect(() => {
     if (callStatus === 'WAITING') {
@@ -332,7 +350,11 @@ export default function BasicDashboard({
         // Request microphone permission upfront so Android prompts the user immediately
         await requestMediaPermissions(false);
       }
-      await requestCall(type, intake);
+      const finalIntake: CallIntake = {
+        ...(intake || {}),
+        anonymous: typeof intake?.anonymous === 'boolean' ? intake.anonymous : isAnonymous,
+      };
+      await requestCall(type, finalIntake);
     } catch (e) {
       // Handled in store
     }
@@ -525,10 +547,10 @@ export default function BasicDashboard({
               isAnonymous ? styles.switchTrackOn : styles.switchTrackOff,
             ]}
           >
-            <View
+            <Animated.View
               style={[
                 styles.switchKnob,
-                isAnonymous ? styles.switchKnobOn : styles.switchKnobOff,
+                { transform: [{ translateX: knobTranslate }] },
               ]}
             />
           </View>
@@ -964,6 +986,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 2,
     justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   switchTrackOn: {
     backgroundColor: Theme.colors.tacticalNavy,
@@ -976,13 +1000,11 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
+    position: 'absolute',
+    left: 2,
   },
-  switchKnobOn: {
-    alignSelf: 'flex-end',
-  },
-  switchKnobOff: {
-    alignSelf: 'flex-start',
-  },
+  switchKnobOn: {},
+  switchKnobOff: {},
   rosterSection: {
     marginBottom: 16,
   },

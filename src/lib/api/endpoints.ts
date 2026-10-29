@@ -8,6 +8,8 @@ export const ENDPOINTS = {
   CALL_ACCEPT: (id: number) => `/calls/${id}/accept?channel=MOBILE`,
   CALL_END: (id: number) => `/calls/${id}/end`,
   CALL_REPORT: (id: number) => `/calls/${id}/report`,
+  REPORTS: '/reports',
+  REPORT_STATS: '/reports/stats',
   CALLS_RECONNECT: (id: number) => `/calls/${id}/reconnect`,
   CALLS_HEARTBEAT: (id: number) => `/calls/${id}/heartbeat`,
   CALLS_MESSAGES: (id: number) => `/calls/${id}/messages`,

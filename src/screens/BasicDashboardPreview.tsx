@@ -189,7 +189,7 @@ export default function BasicDashboardPreview({
   const { width } = useWindowDimensions();
   const insets = useAppInsets();
   const [selectedType, setSelectedType] = useState<SessionType>('VIDEO');
-  const [isAnonymous, setIsAnonymous] = useState(true);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [showOriginalDashboard, setShowOriginalDashboard] = useState(false);
 
@@ -220,6 +220,22 @@ export default function BasicDashboardPreview({
 
   // Pulse animation for waiting room
   const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  // Smooth switch animation for anonymity toggle
+  const switchAnim = useRef(new Animated.Value(isAnonymous ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(switchAnim, {
+      toValue: isAnonymous ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [isAnonymous, switchAnim]);
+
+  const knobTranslate = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 18],
+  });
 
   // No chaplains available modal state
   const [showNoChaplainsModal, setShowNoChaplainsModal] = useState(false);
@@ -252,6 +268,7 @@ export default function BasicDashboardPreview({
           setBasicProfile(profile);
           if (typeof profile.isAnonymous === 'boolean') {
             setIsAnonymous(profile.isAnonymous);
+            useCallStore.getState().setIsAnonymous(profile.isAnonymous);
           }
         }
       })
@@ -335,8 +352,9 @@ export default function BasicDashboardPreview({
   const handleToggleAnonymity = async () => {
     const nextVal = !isAnonymous;
     setIsAnonymous(nextVal);
+    useCallStore.getState().setIsAnonymous(nextVal);
     try {
-      await updateMyBasicProfile({ isAnonymous: nextVal });
+      await updateMyBasicProfile({ isAnonymous: nextVal, anonymous: nextVal });
     } catch (err) {
       console.warn('[BasicDashboardPreview] Failed to persist anonymity change:', err);
     }
@@ -460,7 +478,11 @@ export default function BasicDashboardPreview({
       if (type === 'VIDEO') {
         await requestMediaPermissions(false);
       }
-      await requestCall(type, intake);
+      const finalIntake: CallIntake = {
+        ...(intake || {}),
+        anonymous: typeof intake?.anonymous === 'boolean' ? intake.anonymous : isAnonymous,
+      };
+      await requestCall(type, finalIntake);
       if (type === 'CHAT') {
         console.log('[BasicDashboardPreview] Chat requested successfully, launching ChatPreview...');
         onJoinChat();
@@ -717,10 +739,10 @@ export default function BasicDashboardPreview({
                 isAnonymous ? styles.switchTrackOn : styles.switchTrackOff,
               ]}
             >
-              <View
+              <Animated.View
                 style={[
                   styles.switchKnob,
-                  isAnonymous ? styles.switchKnobOn : styles.switchKnobOff,
+                  { transform: [{ translateX: knobTranslate }] },
                 ]}
               />
             </View>
@@ -1069,6 +1091,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 2,
     justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   switchTrackOn: {
     backgroundColor: Theme.colors.tacticalNavy,
@@ -1081,13 +1105,11 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
+    position: 'absolute',
+    left: 2,
   },
-  switchKnobOn: {
-    alignSelf: 'flex-end',
-  },
-  switchKnobOff: {
-    alignSelf: 'flex-start',
-  },
+  switchKnobOn: {},
+  switchKnobOff: {},
 
   // Capellanes de Guardia Roster
   rosterSection: {},

@@ -21,10 +21,30 @@ class IncomingCallFirebaseService : FirebaseMessagingService() {
     val type = data["type"]
 
     if (type == "INCOMING_CALL") {
+      val prefs = getSharedPreferences("IncomingCallAuth", Context.MODE_PRIVATE)
+      val role = prefs.getString("userRole", null)
+      val isStaff = role == "CHAPLAIN" || role == "CHAPLAIN_LEADER" || role == "CHAPLAIN_CONTENT_LEADER" || role == "SUPERUSER"
+      if (!isStaff) {
+        android.util.Log.w("IncomingCallFirebaseService", "Ignoring INCOMING_CALL push: current role is '$role' (not chaplain staff)")
+        return
+      }
       handleIncomingCall(data)
     } else if (type == "CANCEL_CALL") {
       val sessionId = data["sessionId"]?.toIntOrNull() ?: 1001
-      NotificationManagerCompat.from(this).cancel(sessionId)
+      val nm = NotificationManagerCompat.from(this)
+      nm.cancel(sessionId)
+      nm.cancel(1001)
+      try {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+          vm?.defaultVibrator
+        } else {
+          @Suppress("DEPRECATION")
+          getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        }
+        vibrator?.cancel()
+      } catch (_: Exception) {
+      }
       forwardToExpoNotifications(remoteMessage)
     } else {
       forwardToExpoNotifications(remoteMessage)
@@ -78,7 +98,10 @@ class IncomingCallFirebaseService : FirebaseMessagingService() {
     )
 
     val rejectIntent = Intent(this, IncomingCallActionReceiver::class.java).apply {
+      action = "com.cappellan.incomingcall.ACTION_REJECT"
+      setPackage(packageName)
       putExtra("sessionId", sessionId)
+      if (token != null) putExtra("token", token)
     }
 
     val rejectPendingIntent = PendingIntent.getBroadcast(
@@ -135,7 +158,7 @@ class IncomingCallFirebaseService : FirebaseMessagingService() {
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setOngoing(true)
-      .setAutoCancel(false)
+      .setAutoCancel(true)
       .setSound(soundUri)
       .setContentIntent(fullScreenPendingIntent)
       .setFullScreenIntent(fullScreenPendingIntent, true)
@@ -145,16 +168,6 @@ class IncomingCallFirebaseService : FirebaseMessagingService() {
           rejectPendingIntent,
           acceptPendingIntent
         )
-      )
-      .addAction(
-        android.R.drawable.ic_menu_close_clear_cancel,
-        "Rechazar",
-        rejectPendingIntent
-      )
-      .addAction(
-        android.R.drawable.ic_menu_call,
-        "Atender",
-        acceptPendingIntent
       )
 
     NotificationManagerCompat.from(this).notify(sessionId, notificationBuilder.build())

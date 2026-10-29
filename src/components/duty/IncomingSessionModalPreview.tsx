@@ -333,7 +333,7 @@ export default function IncomingSessionModalPreview({
               activeOpacity={0.8}
             >
               <X size={16} color="#DC2626" strokeWidth={2.2} />
-              <Text style={styles.rejectButtonText}>Descartar o Derivar</Text>
+              <Text style={styles.rejectButtonText}>Descartar o Cancelar Llamada</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>

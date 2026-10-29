@@ -82,15 +82,48 @@ function ActiveCallContent({
   const assignedCall = useChaplainStore((state) => state.assignedCall);
   const user = useAuthStore((state) => state.user);
 
-  const session = currentSession || assignedCall;
   const isChaplainRole =
     user?.role === 'CHAPLAIN' ||
     user?.role === 'CHAPLAIN_LEADER' ||
     user?.role === 'SUPERUSER';
+  const session = isChaplainRole
+    ? (assignedCall || currentSession)
+    : (currentSession || assignedCall);
 
   const hasRemote = remoteParticipants.length > 0;
   const remoteParticipant = hasRemote ? remoteParticipants[0] : null;
   const [isRemoteSpeaking, setIsRemoteSpeaking] = useState(false);
+
+  // Determine if the participant being attended is anonymous or has a real name
+  const participantInfo = useMemo(() => {
+    // 1. Explicit anonymity flag in session intake
+    if (session?.intake?.anonymous === true) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    const rawFromSession = session?.callerName?.trim();
+    const rawFromRemote = remoteParticipant?.name?.trim();
+    const rawFromIdentity = remoteParticipant?.identity?.trim();
+
+    const candidate = rawFromSession || rawFromRemote || rawFromIdentity || '';
+
+    if (!candidate) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    const lower = candidate.toLowerCase();
+    const isAnon =
+      lower.startsWith('invitado') ||
+      lower.includes('anónimo') ||
+      lower.includes('anonimo') ||
+      lower.startsWith('guest');
+
+    if (isAnon) {
+      return { isAnonymous: true, displayName: 'Anónimo' };
+    }
+
+    return { isAnonymous: false, displayName: candidate };
+  }, [session?.callerName, session?.intake?.anonymous, remoteParticipant?.name, remoteParticipant?.identity]);
 
   useEffect(() => {
     if (!remoteParticipant) {
@@ -311,7 +344,9 @@ function ActiveCallContent({
                   ]}
                 />
                 <Text style={styles.remoteOverlayName}>
-                  {isChaplainRole ? 'Personal en Consulta' : 'Capellán de Guardia'}
+                  {isChaplainRole
+                    ? (participantInfo.isAnonymous ? 'Anónimo' : participantInfo.displayName)
+                    : 'Capellán de Guardia'}
                 </Text>
               </View>
 
@@ -363,7 +398,9 @@ function ActiveCallContent({
             </View>
 
             <Text style={styles.chaplainTitle}>
-              {isChaplainRole ? 'Personal en Consulta' : 'Capellán de Guardia'}
+              {isChaplainRole
+                ? (participantInfo.isAnonymous ? 'Consulta Anónima' : participantInfo.displayName)
+                : 'Capellán de Guardia'}
             </Text>
 
             <Text style={styles.chaplainBranchSubtitle}>
@@ -710,6 +747,7 @@ export default function CallRoomScreen({ onCallEnded }: CallRoomScreenProps) {
         initialVideo={false}
         onCallEnded={onCallEnded}
         isChaplainRole={isChaplainRole}
+        callerName={currentSession?.callerName || assignedCall?.callerName || undefined}
       />
     );
   }

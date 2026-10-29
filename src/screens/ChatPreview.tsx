@@ -188,16 +188,46 @@ export default function ChatPreview({
   const flatListRef = useRef<FlatList>(null);
   const stompRef = useRef<ChatStompService | null>(null);
   const isTerminatedRef = useRef(false);
+  const [remoteCallerName, setRemoteCallerName] = useState<string | null>(null);
 
-  const displayTitle = isChaplainRole ? comradeName : chaplainName;
+  const rawCallerName =
+    (comradeName && comradeName !== 'Camarada en Consulta' ? comradeName : null) ||
+    assignedCall?.callerName ||
+    currentSession?.callerName ||
+    remoteCallerName ||
+    messages.find((m) => m.senderRole !== 'CHAPLAIN' && m.senderName)?.senderName ||
+    null;
+
+  const isCallerAnonymous =
+    assignedCall?.intake?.anonymous === true ||
+    currentSession?.intake?.anonymous === true ||
+    !rawCallerName ||
+    rawCallerName.startsWith('Invitado') ||
+    rawCallerName === 'Anónimo' ||
+    rawCallerName === 'Camarada Anónimo';
+
+  const resolvedComradeName = isCallerAnonymous ? 'Anónimo' : rawCallerName!;
+  const displayTitle = isChaplainRole ? resolvedComradeName : chaplainName;
+
+  const isMySessionAnonymous =
+    currentSession?.intake?.anonymous === true ||
+    currentSession?.intake?.isAnonymous === true ||
+    (currentSession?.callerName
+      ? currentSession.callerName.startsWith('Invitado')
+      : useCallStore.getState().isAnonymous);
+
   const mySenderRole: ChatSenderRole = isChaplainRole
     ? 'CHAPLAIN'
-    : user
+    : user && !isMySessionAnonymous
     ? 'BASIC'
     : 'GUEST';
   const mySenderName = isChaplainRole
     ? user?.username || 'Capellán'
-    : user?.username || 'Oficial Reservado';
+    : isMySessionAnonymous
+    ? 'Anónimo'
+    : currentSession?.callerName && !currentSession.callerName.startsWith('Invitado')
+    ? currentSession.callerName
+    : user?.username || 'Usuario';
 
   // Watch for call store errors (e.g. 404 No chaplains available)
   useEffect(() => {
@@ -297,6 +327,9 @@ export default function ChatPreview({
 
     sse.addEventListener('status-change', (data: any) => {
       if (!isMounted) return;
+      if (data?.callerName) {
+        setRemoteCallerName(data.callerName);
+      }
       if (data?.status === 'ENDED') {
         console.log(`[ChatPreview] 🛑 Remote session status ended via SSE (Session #${effectiveSessionId}) with reason:`, data.endReason);
         handleRemoteSessionEnded(data.endReason);
@@ -323,6 +356,10 @@ export default function ChatPreview({
         });
 
         if (!isMounted) return;
+
+        if (detail?.callerName) {
+          setRemoteCallerName(detail.callerName);
+        }
 
         if (!detail || detail.status === 'ENDED') {
           console.log(`[ChatPreview] 🛑 Remote session status ended (Session #${effectiveSessionId}) with reason:`, detail?.endReason);
@@ -386,12 +423,13 @@ export default function ChatPreview({
             return prev;
           }
           // Replace matching optimistic message
+          const isIncomingFromChaplain = incoming.senderRole === 'CHAPLAIN';
           const optIdx = prev.findIndex(
             (p) =>
               p.id &&
               p.id < 0 &&
               p.content === incoming.content &&
-              p.senderRole === incoming.senderRole
+              (p.senderRole === 'CHAPLAIN') === isIncomingFromChaplain
           );
           if (optIdx >= 0) {
             const next = [...prev];
@@ -515,9 +553,9 @@ export default function ChatPreview({
   };
 
   const renderMessageItem = ({ item }: { item: ChatMessage }) => {
-    const isMe =
-      (item.senderRole && item.senderRole === mySenderRole) ||
-      item.senderName === mySenderName;
+    const isMe = isChaplainRole
+      ? item.senderRole === 'CHAPLAIN'
+      : item.senderRole !== 'CHAPLAIN';
 
     const timeStr = item.timestamp
       ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -627,6 +665,7 @@ export default function ChatPreview({
         <CallIntakeModalPreview
           visible={showIntakeModal}
           sessionType="CHAT"
+          isAnonymous={useCallStore.getState().isAnonymous}
           onClose={() => setShowIntakeModal(false)}
           isSubmitting={callStatus === 'REQUESTING'}
           onSubmit={handleStartChatRequest}

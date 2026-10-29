@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { useAuthStore } from '../../lib/stores/auth';
+import { useCallStore } from '../../lib/stores/call';
 import { useAppInsets } from '../../lib/safeArea';
 import {
   TacticalCard,
@@ -141,6 +142,7 @@ export default function ReservedProfileView({
           setPhone(data.phone || '');
           setLocation(data.location || '');
           setIsAnonymous(Boolean(data.isAnonymous));
+          useCallStore.getState().setIsAnonymous(Boolean(data.isAnonymous));
         })
         .catch(() => {
           // Fallback
@@ -202,8 +204,10 @@ export default function ReservedProfileView({
           phone: phone.trim() || undefined,
           location: location.trim() || undefined,
           isAnonymous,
+          anonymous: isAnonymous,
         });
         setBasicProfile(updated);
+        useCallStore.getState().setIsAnonymous(Boolean(updated?.isAnonymous ?? isAnonymous));
         Alert.alert('Ficha Guardada', 'Tus datos confidenciales han sido actualizados con éxito.');
       }
     } catch (err: any) {
@@ -216,9 +220,10 @@ export default function ReservedProfileView({
   const handleToggleAnonymity = async () => {
     const nextVal = !isAnonymous;
     setIsAnonymous(nextVal);
+    useCallStore.getState().setIsAnonymous(nextVal);
     if (!isChaplain) {
       try {
-        await updateMyBasicProfile({ isAnonymous: nextVal });
+        await updateMyBasicProfile({ isAnonymous: nextVal, anonymous: nextVal });
       } catch (e) {
         // Ignored
       }
