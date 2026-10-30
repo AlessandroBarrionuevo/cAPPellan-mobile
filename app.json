@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "tmp-expo-project",
+    "name": "cappellan",
     "slug": "capellanes-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,7 +28,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
-      "package": "com.cappellan.cepdlc",
+      "package": "com.capellania.evangelica.pdlc",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
