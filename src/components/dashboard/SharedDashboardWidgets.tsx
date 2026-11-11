@@ -155,6 +155,7 @@ export interface SharedDashboardWidgetsProps {
   onJoinCall?: () => void;
   onJoinChat?: () => void;
   showRoster?: boolean;
+  onInitialLoadComplete?: () => void;
 }
 
 export function SharedDashboardWidgets({
@@ -164,6 +165,7 @@ export function SharedDashboardWidgets({
   onJoinCall,
   onJoinChat,
   showRoster = true,
+  onInitialLoadComplete,
 }: SharedDashboardWidgetsProps) {
   // 1. Perlita State
   const [perlita, setPerlita] = useState<Perlita | null>(null);
@@ -206,7 +208,7 @@ export function SharedDashboardWidgets({
     let isMounted = true;
     setIsLoadingPerlita(true);
 
-    getPerlitaDelDia()
+    const pPerlita = getPerlitaDelDia()
       .then((data) => {
         if (isMounted) setPerlita(data || getDeterministicForcePerlita());
       })
@@ -218,20 +220,20 @@ export function SharedDashboardWidgets({
         if (isMounted) setIsLoadingPerlita(false);
       });
 
-    if (showRoster) {
-      getChaplainTeam()
-        .then((team) => {
-          if (isMounted && Array.isArray(team) && team.length > 0) {
-            setChaplainTeam(team);
-          }
-        })
-        .catch((err) => {
-          console.warn('Error loading chaplain team in shared widgets:', err);
-        });
-    }
+    const pRoster = showRoster
+      ? getChaplainTeam()
+          .then((team) => {
+            if (isMounted && Array.isArray(team) && team.length > 0) {
+              setChaplainTeam(team);
+            }
+          })
+          .catch((err) => {
+            console.warn('Error loading chaplain team in shared widgets:', err);
+          })
+      : Promise.resolve();
 
     setIsLoadingPrayers(true);
-    request<PaginatedPrayersResponse>(`${ENDPOINTS.PRAYERS}?page=0&size=5`)
+    const pPrayers = request<PaginatedPrayersResponse>(`${ENDPOINTS.PRAYERS}?page=0&size=5`)
       .then((res) => {
         if (isMounted && res && Array.isArray(res.content) && res.content.length > 0) {
           setPrayersList(res.content.slice(0, 3));
@@ -245,7 +247,7 @@ export function SharedDashboardWidgets({
       });
 
     setIsLoadingGratitudes(true);
-    getGratitudes(0, 5)
+    const pGratitudes = getGratitudes(0, 5)
       .then((res) => {
         if (isMounted && res && Array.isArray(res.content) && res.content.length > 0) {
           setGratitudesList(res.content.slice(0, 3));
@@ -259,7 +261,7 @@ export function SharedDashboardWidgets({
       });
 
     setIsLoadingContents(true);
-    fetchContents()
+    const pContents = fetchContents()
       .then((items) => {
         if (isMounted && Array.isArray(items) && items.length > 0) {
           setContentList(items.slice(0, 3));
@@ -271,6 +273,12 @@ export function SharedDashboardWidgets({
       .finally(() => {
         if (isMounted) setIsLoadingContents(false);
       });
+
+    void Promise.allSettled([pPerlita, pRoster, pPrayers, pGratitudes, pContents]).then(() => {
+      if (isMounted) {
+        onInitialLoadComplete?.();
+      }
+    });
 
     return () => {
       isMounted = false;

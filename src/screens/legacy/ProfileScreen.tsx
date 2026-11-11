@@ -37,7 +37,7 @@ export default function LegacyProfileScreen() {
 
   const handleLogoutPress = () => {
     Alert.alert(
-      'Cierre Inmediato Seguro',
+      'Cerrar Sesión',
       '¿Deseas cerrar la sesión activa y purgar las credenciales locales de este dispositivo?',
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -137,7 +137,7 @@ export default function LegacyProfileScreen() {
         <View style={styles.prefDivider} />
 
         {/* Option 2: Auto Purge History */}
-        <View style={styles.prefItem}>
+        {/* <View style={styles.prefItem}>
           <View style={styles.prefItemLeft}>
             <View style={styles.prefIconWrapper}>
               <Trash2 size={18} color={Theme.colors.secondary} />
@@ -154,12 +154,12 @@ export default function LegacyProfileScreen() {
           >
             <View style={[styles.switchKnob, autoPurge ? styles.knobOn : styles.knobOff]} />
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         <View style={styles.prefDivider} />
 
         {/* Option 3: Silent Notifications */}
-        <View style={styles.prefItem}>
+        {/* <View style={styles.prefItem}>
           <View style={styles.prefItemLeft}>
             <View style={styles.prefIconWrapper}>
               <BellOff size={18} color={Theme.colors.secondary} />
@@ -176,12 +176,12 @@ export default function LegacyProfileScreen() {
           >
             <View style={[styles.switchKnob, silentNotifs ? styles.knobOn : styles.knobOff]} />
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         <View style={styles.prefDivider} />
 
         {/* Option 4: Tactical Emergency Mode */}
-        <TouchableOpacity style={styles.prefItem} activeOpacity={0.8}>
+        {/* <TouchableOpacity style={styles.prefItem} activeOpacity={0.8}>
           <View style={styles.prefItemLeft}>
             <View style={styles.prefIconWrapper}>
               <SlidersHorizontal size={18} color={Theme.colors.secondary} />
@@ -192,7 +192,7 @@ export default function LegacyProfileScreen() {
             </View>
           </View>
           <ChevronRight size={18} color={Theme.colors.onSurfaceVariant} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </TacticalCard>
 
       {/* 4. Quick Logout / Cierre Inmediato Seguro */}

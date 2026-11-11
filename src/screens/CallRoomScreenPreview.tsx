@@ -177,9 +177,9 @@ function ActiveCallContentPreview({
 
   const room = useRoomContext();
   const connectionState = useConnectionState();
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, cameraTrack } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
-  const tracks = useTracks([Track.Source.Camera]);
+  const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
 
   const currentSession = useCallStore((state) => state.currentSession);
   const assignedCall = useChaplainStore((state) => state.assignedCall);
@@ -353,14 +353,20 @@ function ActiveCallContentPreview({
   }, [tracks, localParticipant.identity]);
 
   const localVideoTrack = useMemo(() => {
+    if (cameraTrack && cameraTrack.track) {
+      return {
+        participant: localParticipant,
+        publication: cameraTrack,
+        source: Track.Source.Camera,
+      };
+    }
     return tracks.find(
       (t) =>
         t.participant.identity === localParticipant.identity &&
         t.source === Track.Source.Camera &&
-        t.publication &&
-        !t.publication.isMuted
+        t.publication
     );
-  }, [tracks, localParticipant.identity]);
+  }, [cameraTrack, localParticipant, tracks]);
 
   const handleToggleMic = useCallback(async () => {
     try {
@@ -382,17 +388,28 @@ function ActiveCallContentPreview({
           return;
         }
       }
-      await localParticipant.setCameraEnabled(!isCameraEnabled);
+      await localParticipant.setCameraEnabled(!isCameraEnabled, { facingMode });
     } catch (err) {
       console.warn('[CallRoomPreview] Error toggling camera:', err);
     }
-  }, [isCameraEnabled, localParticipant]);
+  }, [isCameraEnabled, facingMode, localParticipant]);
 
   const handleFlipCamera = useCallback(async () => {
     try {
       const nextFacing = facingMode === 'user' ? 'environment' : 'user';
-      await localParticipant.setCameraEnabled(false);
-      await localParticipant.setCameraEnabled(true, { facingMode: nextFacing });
+      const videoPub = localParticipant.getTrackPublication(Track.Source.Camera);
+      const videoTrack = videoPub?.videoTrack;
+
+      if (videoTrack) {
+        const nativeTrack = (videoTrack as any).mediaStreamTrack;
+        if (nativeTrack && typeof nativeTrack.applyConstraints === 'function') {
+          await nativeTrack.applyConstraints({ facingMode: nextFacing });
+        } else if (nativeTrack && typeof nativeTrack._switchCamera === 'function') {
+          nativeTrack._switchCamera();
+        } else if (typeof (videoTrack as any).restartTrack === 'function') {
+          await (videoTrack as any).restartTrack({ facingMode: nextFacing });
+        }
+      }
       setFacingMode(nextFacing);
     } catch (err) {
       console.warn('[CallRoomPreview] Error flipping camera:', err);
@@ -484,6 +501,7 @@ function ActiveCallContentPreview({
               trackRef={remoteVideoTrack}
               style={styles.remoteVideo}
               objectFit="cover"
+              zOrder={0}
             />
 
             {/* Remote Participant Floating Overlay Badge */}
@@ -592,6 +610,7 @@ function ActiveCallContentPreview({
               mirror={facingMode === 'user'}
               style={styles.pipVideo}
               objectFit="cover"
+              zOrder={1}
             />
             <View style={styles.pipHeader}>
               <TouchableOpacity
@@ -738,7 +757,31 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
         }
       }
 
-      const perms = await requestMediaPermissions(true);
+      // 1. Obtain session context to verify if basic user is in anonymous mode
+      const currentSession = useCallStore.getState().currentSession;
+      const assignedCall = useChaplainStore.getState().assignedCall;
+      const currentUser = useAuthStore.getState().user;
+      const isAnonymousStore = useCallStore.getState().isAnonymous;
+
+      const isChaplainRoleCheck =
+        currentUser?.role === 'CHAPLAIN' ||
+        currentUser?.role === 'CHAPLAIN_LEADER' ||
+        currentUser?.role === 'SUPERUSER';
+      const session = isChaplainRoleCheck
+        ? (assignedCall || currentSession)
+        : (currentSession || assignedCall);
+
+      const isAnon = Boolean(
+        isAnonymousStore ||
+        session?.intake?.anonymous ||
+        session?.intake?.isAnonymous ||
+        (session as any)?.isAnonymous
+      );
+      const isBasicAnon = !isChaplainRoleCheck && isAnon;
+
+      // Explicitly request permissions BEFORE initiating WebRTC connection
+      // For basic user in anonymous mode, only microphone is requested initially.
+      const perms = await requestMediaPermissions(!isBasicAnon);
       if (!perms.microphone) {
         throw new Error('El permiso de micrófono es requerido para ingresar a la sala pastoral.');
       }
@@ -750,10 +793,6 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
           console.warn('[CallRoomPreview] AudioSession start warning:', e);
         }
       }
-
-      const currentSession = useCallStore.getState().currentSession;
-      const assignedCall = useChaplainStore.getState().assignedCall;
-      const session = currentSession || assignedCall;
 
       if (session?.token) {
         setToken(session.token);
@@ -818,11 +857,25 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
   const user = useAuthStore((state) => state.user);
   const currentSession = useCallStore((state) => state.currentSession);
   const assignedCall = useChaplainStore((state) => state.assignedCall);
+  const isAnonymousStore = useCallStore((state) => state.isAnonymous);
 
   const isChaplainRole =
     user?.role === 'CHAPLAIN' ||
     user?.role === 'CHAPLAIN_LEADER' ||
     user?.role === 'SUPERUSER';
+
+  const session = isChaplainRole
+    ? (assignedCall || currentSession)
+    : (currentSession || assignedCall);
+
+  const isAnonymous = Boolean(
+    isAnonymousStore ||
+    session?.intake?.anonymous ||
+    session?.intake?.isAnonymous ||
+    (session as any)?.isAnonymous
+  );
+  const isBasicAnonymous = !isChaplainRole && isAnonymous;
+  const initialVideo = !isBasicAnonymous;
 
   const decodedToken = useMemo(() => {
     return token ? decodeRoomToken(token) : null;
@@ -929,7 +982,7 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
           token: token,
           apiUrl: ENV.CLOUDFLARE_CALLS_API_URL,
         }}
-        initialVideo={false}
+        initialVideo={initialVideo}
         onCallEnded={onCallEnded}
         isChaplainRole={isChaplainRole}
         callerName={currentSession?.callerName || assignedCall?.callerName || undefined}
@@ -943,7 +996,7 @@ export default function CallRoomScreenPreview({ onCallEnded }: CallRoomScreenPre
       token={token}
       connect={true}
       audio={true}
-      video={false}
+      video={initialVideo}
       onError={handleLiveKitError}
       onDisconnected={handleDisconnected}
     >

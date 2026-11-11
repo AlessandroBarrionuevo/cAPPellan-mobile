@@ -20,6 +20,7 @@ import { useAppInsets } from '../lib/safeArea';
 import DutyConsole from '../components/duty/DutyConsole';
 import { NewReportModalPreview } from '../components/reports/NewReportModalPreview';
 import { SharedDashboardWidgets, DashboardHeader } from '../components/dashboard';
+import { AppPreloader, ENABLE_APP_PRELOADER } from '../components/common';
 import {
   Users,
   UserCheck,
@@ -76,6 +77,8 @@ export default function LeaderDashboard({
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isDashboardReady, setIsDashboardReady] = useState(false);
+  const [showPreloader, setShowPreloader] = useState<boolean>(ENABLE_APP_PRELOADER);
 
   const status = useChaplainStore((state) => state.status);
   const toggleStatus = useChaplainStore((state) => state.toggleStatus);
@@ -245,6 +248,7 @@ export default function LeaderDashboard({
               onJoinCall={onJoinCall}
               onJoinChat={onJoinChat}
               showRoster={true}
+              onInitialLoadComplete={() => setIsDashboardReady(true)}
             />
           </View>
 
@@ -620,6 +624,13 @@ export default function LeaderDashboard({
           </Modal>
         </ScrollView>
       )}
+      {showPreloader ? (
+        <AppPreloader
+          isAppReady={isDashboardReady}
+          subtitle="CONSOLA DE LIDERAZGO"
+          onFinish={() => setShowPreloader(false)}
+        />
+      ) : null}
     </View>
   );
 }

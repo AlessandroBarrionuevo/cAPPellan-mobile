@@ -216,11 +216,11 @@ export default function NoChaplainAvailableModal({
     'Tu bienestar y el de tus camaradas es prioridad. Si te encontrás en una situación crítica o urgente, podés comunicarte inmediatamente a través de las siguientes líneas de guardia:';
 
   if (endReason === 'MISSED_TIMEOUT') {
-    badgeText = 'TIEMPO DE ESPERA AGOTADO (45s)';
+    badgeText = 'TIEMPO DE ESPERA AGOTADO';
     badgeColor = '#DC2626';
     badgeBg = '#FEF2F2';
     title = 'Sin Respuesta en la Guardia';
-    subtitle = `Transcurrieron los 45 segundos de guardia sin que un capellán en servicio pudiera tomar tu solicitud de ${modalityLabel}.`;
+    subtitle = `Los capellanes de guardia no pudieron responder a tu solicitud de ${modalityLabel} en este momento.`;
     subNote =
       'Tu necesidad es prioritaria. Podés reintentar la solicitud ahora mismo, dejar tu pedido confidencial en el Muro de Oración para intercesión o llamar a las líneas de emergencia:';
   } else if (endReason === 'CHAPLAIN_BUSY') {

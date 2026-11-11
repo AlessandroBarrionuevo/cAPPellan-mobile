@@ -31,6 +31,8 @@ import {
   TacticalCard,
   TacticalButton,
   ConfidentialityBanner,
+  AppPreloader,
+  ENABLE_APP_PRELOADER,
 } from '../components/common';
 import {
   Shield,
@@ -107,8 +109,9 @@ export default function BasicDashboard({
 
   // Section 10: Dynamic Perlita del Día Widget State
   const [perlita, setPerlita] = useState<Perlita | null>(null);
-  const [isLoadingPerlita, setIsLoadingPerlita] = useState(false);
+  const [isLoadingPerlita, setIsLoadingPerlita] = useState(true);
   const [isRandomPerlita, setIsRandomPerlita] = useState(false);
+  const [showPreloader, setShowPreloader] = useState<boolean>(ENABLE_APP_PRELOADER);
 
   // Section 7.1: Real Chaplain Team Directory
   const [chaplainTeam, setChaplainTeam] = useState<ChaplainTeamMember[]>([]);
@@ -360,7 +363,7 @@ export default function BasicDashboard({
     }
   };
 
-  // 1. WAITING ROOM VIEW (Smooth Ripple)
+  // 1. WAITING ROOM VIEW (Smooth Ripple with Devotional Perlita)
   if (callStatus === 'WAITING') {
     const pulseScale = pulseAnim.interpolate({
       inputRange: [0, 1],
@@ -375,49 +378,112 @@ export default function BasicDashboard({
 
     return (
       <View style={styles.centeredContainer}>
-        <TacticalCard style={styles.waitingCard} padding={24}>
-          <View style={styles.pulseWrapper}>
-            <Animated.View
-              style={[
-                styles.pulseRing,
-                {
-                  transform: [{ scale: pulseScale }],
-                  opacity: pulseOpacity,
-                },
-              ]}
-            />
-            <View style={styles.pulseInnerCircle}>
-              {isChat ? (
-                <MessageSquare size={30} color={Theme.colors.tacticalNavy} />
-              ) : (
-                <HeartHandshake size={32} color={Theme.colors.tacticalNavy} />
-              )}
+        <ScrollView
+          style={{ width: '100%' }}
+          contentContainerStyle={{ alignItems: 'center', width: '100%', maxWidth: 420, paddingVertical: 16 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Arriba: Llamando capellán */}
+          <TacticalCard style={styles.waitingCard} padding={20}>
+            <View style={styles.pulseWrapper}>
+              <Animated.View
+                style={[
+                  styles.pulseRing,
+                  {
+                    transform: [{ scale: pulseScale }],
+                    opacity: pulseOpacity,
+                  },
+                ]}
+              />
+              <View style={styles.pulseInnerCircle}>
+                {isChat ? (
+                  <MessageSquare size={30} color={Theme.colors.tacticalNavy} />
+                ) : (
+                  <HeartHandshake size={32} color={Theme.colors.tacticalNavy} />
+                )}
+              </View>
             </View>
+
+            <Text style={styles.waitingTitle}>
+              {isChat ? 'Conectando con un capellán...' : 'Llamando capellán...'}
+            </Text>
+            <Text style={styles.waitingSubtitle}>
+              {isChat
+                ? 'Tu solicitud de chat confidencial está en cola prioritaria. Mientras esperás, podés leer y meditar en la perlita de paz.'
+                : 'Estamos conectándote con la guardia pastoral. Mientras esperás, podés leer y meditar en la perlita de paz.'}
+            </Text>
+          </TacticalCard>
+
+          {/* En el medio: Widget de Perlita para que pueda leer */}
+          <View style={{ width: '100%', marginTop: 14 }}>
+            <TacticalCard style={styles.reflectionCard} padding={16}>
+              <View style={styles.reflectionHeader}>
+                <View style={styles.reflectionBadgeRow}>
+                  <Sparkles size={14} color={Theme.colors.secondary} />
+                  <Text style={styles.reflectionBadge}>
+                    {isRandomPerlita ? 'PERLITA DEVOCIONAL ALEATORIA' : 'PERLITA DEL DÍA'}
+                  </Text>
+                </View>
+                {perlita?.date && (
+                  <Text style={styles.reflectionToday}>{perlita.date}</Text>
+                )}
+              </View>
+
+              {isLoadingPerlita ? (
+                <View style={styles.widgetLoading}>
+                  <ActivityIndicator size="small" color={Theme.colors.tacticalNavy} />
+                  <Text style={styles.widgetLoadingText}>Cargando versículo del día...</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.quoteText}>
+                    “{perlita?.text || 'Yavé es mi Pastor. Nada me faltará.'}”
+                  </Text>
+
+                  <View style={styles.reflectionFooter}>
+                    <View style={styles.widgetFooterTextCol}>
+                      <Text style={styles.scriptureRef}>
+                        {perlita?.reference || 'Salmos 23:1'}
+                      </Text>
+                    </View>
+
+                    <View style={styles.widgetActionButtons}>
+                      <TouchableOpacity
+                        style={styles.widgetIconBtn}
+                        onPress={handleRandomPerlitaInDashboard}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Generar perlita aleatoria"
+                      >
+                        <RefreshCw size={14} color={Theme.colors.tacticalNavy} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.widgetIconBtn}
+                        onPress={handleSharePerlitaInDashboard}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Compartir versículo"
+                      >
+                        <Share2 size={14} color={Theme.colors.tacticalNavy} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              )}
+            </TacticalCard>
           </View>
 
-          <Text style={styles.waitingTitle}>
-            {isChat ? 'Estableciendo enlace de chat...' : 'Estableciendo enlace pastoral...'}
-          </Text>
-          <Text style={styles.waitingSubtitle}>
-            {isChat
-              ? 'Tu solicitud de chat confidencial está en cola prioritaria. Un capellán de guardia responderá en breve.'
-              : 'Tu llamado está en cola prioritaria. Un capellán de guardia responderá en breve.'}
-          </Text>
-
-          <View style={styles.waitBadge}>
-            <Timer size={14} color={Theme.colors.tacticalNavy} />
-            <Text style={styles.waitBadgeText}>Tiempo estimado: &lt; 30 segundos</Text>
+          {/* Abajo de todo: Botón de Cancelar */}
+          <View style={{ width: '100%', marginTop: 14 }}>
+            <TacticalButton
+              title="Cancelar solicitud"
+              onPress={handleCancelRequest}
+              variant="surface"
+              size="md"
+              leftIcon={<RotateCcw size={16} color={Theme.colors.onSurfaceVariant} />}
+              style={styles.cancelButton}
+            />
           </View>
-
-          <TacticalButton
-            title="Cancelar solicitud"
-            onPress={handleCancelRequest}
-            variant="surface"
-            size="md"
-            leftIcon={<RotateCcw size={16} color={Theme.colors.onSurfaceVariant} />}
-            style={styles.cancelButton}
-          />
-        </TacticalCard>
+        </ScrollView>
       </View>
     );
   }
@@ -736,6 +802,13 @@ export default function BasicDashboard({
           handleStartCall(typeToRetry);
         }}
       />
+      {showPreloader ? (
+        <AppPreloader
+          isAppReady={!isLoadingPerlita}
+          subtitle="CAPELLANÍA EVANGÉLICA"
+          onFinish={() => setShowPreloader(false)}
+        />
+      ) : null}
     </>
   );
 }

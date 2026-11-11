@@ -446,7 +446,7 @@ export function NewReportModalPreview({
                   <View style={styles.blueDot} />
                   <Text style={styles.fieldLabel}>NIVEL DE GRAVEDAD / ATENCIÓN</Text>
                 </View>
-                <View
+                {/* <View
                   style={[
                     styles.severityBadgePill,
                     { backgroundColor: currentSeverityObj.bg },
@@ -460,7 +460,7 @@ export function NewReportModalPreview({
                   >
                     Nivel {currentSeverityObj.level}: {currentSeverityObj.label}
                   </Text>
-                </View>
+                </View> */}
               </View>
 
               <View style={styles.severityGrid}>
@@ -541,7 +541,7 @@ export function NewReportModalPreview({
                   <View style={styles.blueDot} />
                   <Text style={styles.fieldLabel}>SÍNTESIS PASTORAL CONFIDENCIAL</Text>
                 </View>
-                <Text style={styles.charCount}>{summary.length}/500</Text>
+                {/* <Text style={styles.charCount}>{summary.length}/500</Text> */}
               </View>
               <TextInput
                 style={[

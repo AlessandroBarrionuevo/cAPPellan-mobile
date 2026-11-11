@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
-import { Mail, Lock, Shield, ShieldCheck, Check, Eye, EyeOff, UserPlus } from 'lucide-react-native';
+import { Mail, Lock, Shield, ShieldCheck, Check, Eye, EyeOff, UserPlus, AlertCircle } from 'lucide-react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { useAuthStore } from '../lib/stores/auth';
 
@@ -21,6 +21,11 @@ interface LoginScreenPreviewProps {
   onSuccess?: () => void;
   onNavigateToRegister?: () => void;
   onNavigateToForgotPassword?: () => void;
+}
+
+interface LoginFieldErrors {
+  username?: string;
+  password?: string;
 }
 
 export default function LoginScreenPreview({
@@ -35,24 +40,38 @@ export default function LoginScreenPreview({
   const [rememberDevice, setRememberDevice] = useState(true);
   const [isUsernameFocused, setIsUsernameFocused] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
+  const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const login = useAuthStore((state) => state.login);
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError('Por favor ingresá tu correo o credencial y contraseña.');
+    const nextFieldErrors: LoginFieldErrors = {};
+    if (!username.trim()) {
+      nextFieldErrors.username = 'Ingresá tu correo o credencial institucional.';
+    }
+    if (!password.trim()) {
+      nextFieldErrors.password = 'Ingresá tu contraseña de seguridad.';
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setAuthError(null);
       return;
     }
 
-    setError(null);
+    setFieldErrors({});
+    setAuthError(null);
     setLoading(true);
     try {
       await login(username.trim(), password.trim());
       onSuccess?.();
     } catch (err: any) {
-      setError(err.message || 'Credenciales inválidas o error de conexión.');
+      setAuthError(
+        err.message ||
+          'El usuario o la contraseña ingresados son incorrectos. Verificá tus datos e intentá nuevamente.'
+      );
     } finally {
       setLoading(false);
     }
@@ -153,83 +172,123 @@ export default function LoginScreenPreview({
         <View style={styles.formArea}>
           <Text style={styles.formSubtitle}>Ingresá con tu cuenta</Text>
           {/* Email / Credential Input */}
-          <View
-            style={[
-              styles.inputPill,
-              isUsernameFocused && styles.inputPillFocused,
-              Boolean(error) && !username && styles.inputPillError,
-            ]}
-          >
-            <View style={styles.inputIconWrapper}>
-              <Mail
-                size={18}
-                color={isUsernameFocused ? Theme.colors.tacticalNavy : '#94A3B8'}
+          <View style={styles.fieldGroup}>
+            <View
+              style={[
+                styles.inputPill,
+                isUsernameFocused && styles.inputPillFocused,
+                (Boolean(fieldErrors.username) || Boolean(authError)) && styles.inputPillError,
+              ]}
+            >
+              <View style={styles.inputIconWrapper}>
+                <Mail
+                  size={18}
+                  color={
+                    fieldErrors.username || authError
+                      ? Theme.colors.error
+                      : isUsernameFocused
+                      ? Theme.colors.tacticalNavy
+                      : '#94A3B8'
+                  }
+                />
+              </View>
+              <TextInput
+                style={styles.textInputField}
+                placeholder="Correo o credencial institucional"
+                placeholderTextColor="#94A3B8"
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  if (fieldErrors.username) {
+                    setFieldErrors((prev) => ({ ...prev, username: undefined }));
+                  }
+                  if (authError) setAuthError(null);
+                }}
+                onFocus={() => setIsUsernameFocused(true)}
+                onBlur={() => setIsUsernameFocused(false)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
               />
             </View>
-            <TextInput
-              style={styles.textInputField}
-              placeholder="Correo o credencial institucional"
-              placeholderTextColor="#94A3B8"
-              value={username}
-              onChangeText={(text) => {
-                setUsername(text);
-                if (error) setError(null);
-              }}
-              onFocus={() => setIsUsernameFocused(true)}
-              onBlur={() => setIsUsernameFocused(false)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-            />
+            {fieldErrors.username ? (
+              <View style={styles.fieldErrorRow}>
+                <AlertCircle size={13} color={Theme.colors.error} style={styles.fieldErrorIcon} />
+                <Text style={styles.fieldErrorText}>{fieldErrors.username}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Password Input */}
-          <View
-            style={[
-              styles.inputPill,
-              isPasswordFocused && styles.inputPillFocused,
-              Boolean(error) && !password && styles.inputPillError,
-            ]}
-          >
-            <View style={styles.inputIconWrapper}>
-              <Lock
-                size={18}
-                color={isPasswordFocused ? Theme.colors.tacticalNavy : '#94A3B8'}
-              />
-            </View>
-            <TextInput
-              style={styles.textInputField}
-              placeholder="Contraseña de seguridad"
-              placeholderTextColor="#94A3B8"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                if (error) setError(null);
-              }}
-              onFocus={() => setIsPasswordFocused(true)}
-              onBlur={() => setIsPasswordFocused(false)}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity
-              style={styles.eyeToggle}
-              onPress={() => setShowPassword((prev) => !prev)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          <View style={styles.fieldGroup}>
+            <View
+              style={[
+                styles.inputPill,
+                isPasswordFocused && styles.inputPillFocused,
+                (Boolean(fieldErrors.password) || Boolean(authError)) && styles.inputPillError,
+              ]}
             >
-              {showPassword ? (
-                <EyeOff size={18} color="#64748B" />
-              ) : (
-                <Eye size={18} color="#64748B" />
-              )}
-            </TouchableOpacity>
+              <View style={styles.inputIconWrapper}>
+                <Lock
+                  size={18}
+                  color={
+                    fieldErrors.password || authError
+                      ? Theme.colors.error
+                      : isPasswordFocused
+                      ? Theme.colors.tacticalNavy
+                      : '#94A3B8'
+                  }
+                />
+              </View>
+              <TextInput
+                style={styles.textInputField}
+                placeholder="Contraseña de seguridad"
+                placeholderTextColor="#94A3B8"
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                  if (authError) setAuthError(null);
+                }}
+                onFocus={() => setIsPasswordFocused(true)}
+                onBlur={() => setIsPasswordFocused(false)}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={styles.eyeToggle}
+                onPress={() => setShowPassword((prev) => !prev)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showPassword ? (
+                  <EyeOff size={18} color="#64748B" />
+                ) : (
+                  <Eye size={18} color="#64748B" />
+                )}
+              </TouchableOpacity>
+            </View>
+            {fieldErrors.password ? (
+              <View style={styles.fieldErrorRow}>
+                <AlertCircle size={13} color={Theme.colors.error} style={styles.fieldErrorIcon} />
+                <Text style={styles.fieldErrorText}>{fieldErrors.password}</Text>
+              </View>
+            ) : null}
           </View>
 
-          {/* Error Message */}
-          {error ? (
+          {/* Form-level Authentication / Server Error Banner */}
+          {authError ? (
             <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{error}</Text>
+              <View style={styles.errorBannerIconWrap}>
+                <AlertCircle size={18} color="#DC2626" />
+              </View>
+              <View style={styles.errorBannerContent}>
+                <Text style={styles.errorBannerTitle}>No se pudo iniciar sesión</Text>
+                <Text style={styles.errorText}>{authError}</Text>
+              </View>
             </View>
           ) : null}
 
@@ -285,7 +344,7 @@ export default function LoginScreenPreview({
         {/* Confidentiality & Legal Footer */}
         <View style={styles.footerArea}>
           <Text style={styles.footerNote}>
-            Canal cifrado de extremo a extremo y de estricta reserva pastoral.{'\n'}
+            Canal cifrado de extremo a extremo y de estricta reserva pastoral{'\n'}
             <Text style={styles.footerHighlight}>Secreto Profesional & Pastoral</Text>
           </Text>
           <TouchableOpacity
@@ -489,16 +548,19 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 0,
   },
+  fieldGroup: {
+    width: '100%',
+    marginBottom: 12,
+  },
   inputPill: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 52,
     borderRadius: 26,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1.2,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
     paddingHorizontal: 16,
-    marginBottom: 12,
     ...Platform.select({
       ios: {
         shadowColor: '#000000',
@@ -517,7 +579,23 @@ const styles = StyleSheet.create({
   },
   inputPillError: {
     borderColor: Theme.colors.error,
-    backgroundColor: '#FFF8F8',
+    backgroundColor: '#FFF5F5',
+  },
+  fieldErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+    paddingHorizontal: 14,
+  },
+  fieldErrorIcon: {
+    marginRight: 5,
+  },
+  fieldErrorText: {
+    fontFamily: Theme.fonts.body,
+    fontSize: 12,
+    color: Theme.colors.error,
+    lineHeight: 16,
+    flex: 1,
   },
   inputIconWrapper: {
     marginRight: 10,
@@ -537,17 +615,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorBanner: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  errorBannerIconWrap: {
+    marginRight: 10,
+    marginTop: 1,
+  },
+  errorBannerContent: {
+    flex: 1,
+  },
+  errorBannerTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: '#991B1B',
+    marginBottom: 2,
   },
   errorText: {
     fontFamily: Theme.fonts.body,
     fontSize: 12,
-    color: '#DC2626',
-    textAlign: 'center',
+    lineHeight: 17,
+    color: '#B91C1C',
   },
   utilsRow: {
     flexDirection: 'column',

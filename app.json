@@ -9,9 +9,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.capellania.evangelica.pdlc",
       "infoPlist": {
         "NSCameraUsageDescription": "CapellanAPP necesita acceso a la cámara para las sesiones de videollamada de acompañamiento espiritual.",
         "NSMicrophoneUsageDescription": "CapellanAPP necesita acceso al micrófono para las llamadas de acompañamiento pastoral.",
+        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "voip",
           "audio",
@@ -22,9 +24,9 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundImage": "./assets/icon.png",
+        "monochromeImage": "./assets/icon.png" 
       },
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,

@@ -63,27 +63,27 @@ interface InspirationalQuote {
 
 const INSPIRATIONAL_PHRASES: InspirationalQuote[] = [
   {
-    verse: '«Cercano está el Señor a los quebrantados de corazón, y salva a los contritos de espíritu.»',
+    verse: '«Cercano está Yavé a los quebrantados de corazón, Y salva a los contritos de espíritu.»',
     reference: 'Salmos 34:18',
   },
   {
-    verse: '«Venid a mí todos los que estáis trabajados y cargados, y yo os haré descansar.»',
+    verse: '«Vengan a Mí todos los que están agotados y cargados, y Yo los haré descansar.»',
     reference: 'Mateo 11:28',
   },
   {
-    verse: '«No temas, porque yo estoy contigo; no desmayes, porque yo soy tu Dios que te esfuerzo.»',
+    verse: '«No temas, porque Yo estoy contigo. No desmayes, porque Yo soy tu ʼElohim que te esfuerzo. Te ayudaré siempre. Te sostendré siempre con la mano derecha de mi justicia.»',
     reference: 'Isaías 41:10',
   },
   {
-    verse: '«La paz os dejo, mi paz os doy; no se turbe vuestro corazón, ni tenga miedo.»',
+    verse: '«Paz les dejo. Les doy mi paz. Yo no se la doy como el mundo la da. No se atribule ni se atemorice su corazón.»',
     reference: 'Juan 14:27',
   },
   {
-    verse: '«Dios es nuestro amparo y nuestra fortaleza, nuestro pronto auxilio en las tribulaciones.»',
+    verse: '«ʼElohim es nuestro Refugio y Fortaleza, Un auxilio muy presente en la tribulación.»',
     reference: 'Salmos 46:1',
   },
   {
-    verse: '«Echa sobre el Señor tu carga, y él te sustentará; jamás dejará caído al justo.»',
+    verse: '«Echa sobre Yavé tu carga, Y Él te sustentará. Jamás dejará caído al justo.»',
     reference: 'Salmos 55:22',
   },
 ];

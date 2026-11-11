@@ -14,6 +14,7 @@ import { Theme, globalStyles } from '../theme/Theme';
 import { request } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { DashboardHeader } from '../components/dashboard';
+import { AppPreloader, ENABLE_APP_PRELOADER } from '../components/common';
 import { useAuthStore } from '../lib/stores/auth';
 import type { AuthUser, AppRole, PostCallReport, ReportStats } from '../types/api';
 import {
@@ -33,6 +34,8 @@ import {
   ShieldCheck,
   AlertCircle,
   ArrowRightLeft,
+  Eye,
+  EyeOff,
 } from 'lucide-react-native';
 
 export default function SuperuserDashboard() {
@@ -51,6 +54,7 @@ export default function SuperuserDashboard() {
   // New user form state
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [role, setRole] = useState<AppRole>('CHAPLAIN');
   const [assignedLeaderId, setAssignedLeaderId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -64,11 +68,13 @@ export default function SuperuserDashboard() {
   // Stats state
   const [stats, setStats] = useState<ReportStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [isDashboardReady, setIsDashboardReady] = useState(false);
+  const [showPreloader, setShowPreloader] = useState<boolean>(ENABLE_APP_PRELOADER);
 
   useEffect(() => {
-    loadUsers();
-    loadReports();
-    loadStats();
+    void Promise.allSettled([loadUsers(), loadReports(), loadStats()]).then(() => {
+      setIsDashboardReady(true);
+    });
   }, []);
 
   const loadUsers = async () => {
@@ -667,14 +673,28 @@ export default function SuperuserDashboard() {
               />
 
               <Text style={styles.label}>Contraseña</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Mínimo 4 caracteres"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-              />
+              <View style={styles.passwordInputWrapper}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Mínimo 4 caracteres"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showCreatePassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={styles.passwordEyeBtn}
+                  onPress={() => setShowCreatePassword((prev) => !prev)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  {showCreatePassword ? (
+                    <EyeOff size={18} color={Theme.colors.onSurfaceVariant} />
+                  ) : (
+                    <Eye size={18} color={Theme.colors.onSurfaceVariant} />
+                  )}
+                </TouchableOpacity>
+              </View>
 
               <Text style={styles.label}>Rol en la Plataforma</Text>
               <View style={styles.roleOptions}>
@@ -909,6 +929,14 @@ export default function SuperuserDashboard() {
           </View>
         </View>
       </Modal>
+
+      {showPreloader ? (
+        <AppPreloader
+          isAppReady={isDashboardReady}
+          subtitle="PANEL DE SUPERUSUARIO"
+          onFinish={() => setShowPreloader(false)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1445,6 +1473,27 @@ const styles = StyleSheet.create({
     fontFamily: Theme.fonts.body,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  passwordInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: Theme.roundness.md,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontFamily: Theme.fonts.body,
+    color: Theme.colors.onSurface,
+  },
+  passwordEyeBtn: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   roleOptions: {
     flexDirection: 'row',

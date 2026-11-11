@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   Image,
   StyleSheet,
   ViewStyle,
+  TouchableOpacity,
 } from 'react-native';
 import { Theme } from '../../theme/Theme';
 import { useAppInsets } from '../../lib/safeArea';
@@ -16,6 +17,9 @@ export interface DashboardHeaderProps {
   roleBadge?: string;
   rightAction?: React.ReactNode;
   style?: ViewStyle;
+  avatarUrl?: string | null;
+  showAvatar?: boolean;
+  onPressAvatar?: () => void;
 }
 
 export function DashboardHeader({
@@ -24,8 +28,12 @@ export function DashboardHeader({
   roleBadge,
   rightAction,
   style,
+  avatarUrl,
+  showAvatar = false,
+  onPressAvatar,
 }: DashboardHeaderProps) {
   const insets = useAppInsets();
+  const [imageError, setImageError] = useState(false);
 
   const displayName =
     (user as any)?.fullName ||
@@ -33,16 +41,33 @@ export function DashboardHeader({
     (user as any)?.email ||
     'Usuario';
 
+  const resolvedAvatar = showAvatar ? (avatarUrl ?? user?.avatarUrl) : null;
+  const shouldRenderAvatar = Boolean(resolvedAvatar && !imageError);
+
+  const AvatarContainer = onPressAvatar ? TouchableOpacity : View;
+
   return (
     <View style={[styles.headerBar, { paddingTop: insets.top + 8 }, style]}>
       <View style={styles.userRow}>
-        <View style={styles.logoCircle}>
-          <Image
-            source={require('../../../assets/logo.png')}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
-        </View>
+        <AvatarContainer
+          style={styles.logoCircle}
+          {...(onPressAvatar ? { onPress: onPressAvatar, activeOpacity: 0.8 } : {})}
+        >
+          {shouldRenderAvatar ? (
+            <Image
+              source={{ uri: resolvedAvatar! }}
+              style={styles.avatarImg}
+              resizeMode="cover"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
+          )}
+        </AvatarContainer>
         <View style={styles.textCol}>
           <View style={styles.greetingRow}>
             <Text style={styles.greetingText}>{greeting}</Text>
@@ -95,10 +120,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07,
     shadowRadius: 3,
     elevation: 2,
+    overflow: 'hidden',
   },
   logoImg: {
     width: 26,
     height: 26,
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 19,
   },
   textCol: {
     flex: 1,

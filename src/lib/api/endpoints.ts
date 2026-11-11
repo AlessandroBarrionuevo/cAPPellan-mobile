@@ -1,5 +1,9 @@
 export const ENDPOINTS = {
   AUTH_LOGIN: '/auth/login',
+  AUTH_REGISTER: '/auth/register',
+  AUTH_FORGOT_PASSWORD: '/auth/forgot-password',
+  AUTH_RESET_PASSWORD: '/auth/reset-password',
+  AUTH_CHANGE_PASSWORD: '/auth/change-password',
   AUTH_ME: '/auth/me',
   CALLS_REQUEST: '/calls/request',
   CALLS_ASSIGNED: '/calls/assigned',
@@ -64,4 +68,5 @@ export const ENDPOINTS = {
   CHAPLAIN_PROFILE: (id: number) => `/chaplains/${id}/profile`,
   PROFILE_CHAPLAIN: '/profiles/chaplain',
   PROFILE_BASIC_ME: '/profiles/basic/me',
+  STORAGE_UPLOAD: '/storage/upload',
 } as const;

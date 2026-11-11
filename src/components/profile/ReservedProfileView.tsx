@@ -10,7 +10,11 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Theme, globalStyles } from '../../theme/Theme';
 import { useAuthStore } from '../../lib/stores/auth';
 import { useCallStore } from '../../lib/stores/call';
@@ -23,6 +27,7 @@ import {
 import {
   ShieldCheck,
   Lock,
+  Key,
   Trash2,
   BellOff,
   SlidersHorizontal,
@@ -39,14 +44,18 @@ import {
   Award,
   Save,
   X,
+  Camera,
 } from 'lucide-react-native';
 import {
   getMyBasicProfile,
   updateMyBasicProfile,
   getChaplainProfile,
   updateChaplainProfile,
+  uploadAvatarFile,
 } from '../../lib/api/profiles';
-import type { AuthUser, BasicProfile, ChaplainProfile, MilitaryForce } from '../../types/api';
+import { request } from '../../lib/api/client';
+import { ENDPOINTS } from '../../lib/api/endpoints';
+import type { AuthUser, BasicProfile, ChaplainProfile, MilitaryForce, MessageResponse } from '../../types/api';
 
 export const MILITARY_FORCES: { value: MilitaryForce; label: string; code: string }[] = [
   { value: 'EJERCITO', label: 'Ejército Argentino', code: 'EA' },
@@ -100,6 +109,24 @@ export default function ReservedProfileView({
   const [isActiveInForce, setIsActiveInForce] = useState<boolean>(true);
   const [bio, setBio] = useState('');
   const [showForcePicker, setShowForcePicker] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  // Password change state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordFieldErrors, setPasswordFieldErrors] = useState<{
+    current?: string;
+    newPass?: string;
+    confirm?: string;
+  }>({});
 
   const isChaplain =
     user?.role === 'CHAPLAIN' ||
@@ -126,6 +153,7 @@ export default function ReservedProfileView({
           );
           setIsActiveInForce(data.isActiveInForce ?? true);
           setBio(data.bio || '');
+          setAvatarUrl(data.avatarUrl || '');
         })
         .catch(() => {
           // Fallback
@@ -156,6 +184,163 @@ export default function ReservedProfileView({
       isMounted = false;
     };
   }, [user, isChaplain]);
+
+  const handleSelectAvatarSource = () => {
+    if (!isChaplain) return;
+
+    const options: { text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void }[] = [
+      {
+        text: 'Elegir de la galería',
+        onPress: () => handlePickFromGallery(),
+      },
+      {
+        text: 'Tomar fotografía',
+        onPress: () => handleTakePhoto(),
+      },
+    ];
+
+    if (avatarUrl) {
+      options.push({
+        text: 'Eliminar foto actual',
+        style: 'destructive',
+        onPress: () => handleRemoveAvatar(),
+      });
+    }
+
+    options.push({ text: 'Cancelar', style: 'cancel' });
+
+    Alert.alert('Foto de Perfil Ministerial', 'Seleccioná el origen de tu fotografía institucional:', options);
+  };
+
+  const handlePickFromGallery = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permiso Denegado',
+          'Se requiere acceso a la galería para poder subir una foto de perfil ministerial.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await processAndUploadAvatar(result.assets[0].uri);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'No se pudo seleccionar la imagen.');
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permiso Denegado',
+          'Se requiere acceso a la cámara para tomar una foto de perfil ministerial.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await processAndUploadAvatar(result.assets[0].uri);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'No se pudo capturar la fotografía.');
+    }
+  };
+
+  const processAndUploadAvatar = async (localUri: string) => {
+    setIsUploadingAvatar(true);
+    try {
+      const uploadedUrl = await uploadAvatarFile(localUri);
+      setAvatarUrl(uploadedUrl);
+
+      if (chaplainProfile) {
+        const updated = await updateChaplainProfile({
+          fullName: fullName.trim() || chaplainProfile.fullName,
+          militaryForce: (militaryForce as MilitaryForce) || (chaplainProfile.militaryForce as MilitaryForce),
+          militaryRank: militaryRank.trim() || chaplainProfile.militaryRank || undefined,
+          yearsOfService: parseInt(yearsOfService, 10) || chaplainProfile.yearsOfService || 0,
+          isActiveInForce: isActiveInForce,
+          bio: bio.trim() || chaplainProfile.bio || undefined,
+          avatarUrl: uploadedUrl,
+        });
+        setChaplainProfile(updated);
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser) {
+          useAuthStore.getState().setUser({
+            ...currentUser,
+            avatarUrl: updated.avatarUrl || null,
+            fullName: updated.fullName || currentUser.fullName,
+          });
+        }
+      }
+
+      Alert.alert('Foto Actualizada', 'Tu foto de perfil ministerial ha sido guardada exitosamente.');
+    } catch (err: any) {
+      Alert.alert('Error al Subir', err?.message || 'No se pudo procesar o subir la foto de perfil al servidor.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    Alert.alert(
+      'Eliminar Foto',
+      '¿Deseás remover tu foto de perfil ministerial y volver al emblema institucional?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setIsUploadingAvatar(true);
+            try {
+              setAvatarUrl('');
+              if (chaplainProfile) {
+                const updated = await updateChaplainProfile({
+                  fullName: fullName.trim() || chaplainProfile.fullName,
+                  militaryForce: (militaryForce as MilitaryForce) || (chaplainProfile.militaryForce as MilitaryForce),
+                  militaryRank: militaryRank.trim() || chaplainProfile.militaryRank || undefined,
+                  yearsOfService: parseInt(yearsOfService, 10) || chaplainProfile.yearsOfService || 0,
+                  isActiveInForce: isActiveInForce,
+                  bio: bio.trim() || chaplainProfile.bio || undefined,
+                  avatarUrl: '',
+                });
+                setChaplainProfile(updated);
+                const currentUser = useAuthStore.getState().user;
+                if (currentUser) {
+                  useAuthStore.getState().setUser({
+                    ...currentUser,
+                    avatarUrl: null,
+                    fullName: updated.fullName || currentUser.fullName,
+                  });
+                }
+              }
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'No se pudo remover la foto de perfil.');
+            } finally {
+              setIsUploadingAvatar(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -195,8 +380,17 @@ export default function ReservedProfileView({
           yearsOfService: parsedYears,
           isActiveInForce: isActiveInForce,
           bio: bio.trim() || undefined,
+          avatarUrl: avatarUrl.trim() || undefined,
         });
         setChaplainProfile(updated);
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser) {
+          useAuthStore.getState().setUser({
+            ...currentUser,
+            avatarUrl: updated.avatarUrl || null,
+            fullName: updated.fullName || currentUser.fullName,
+          });
+        }
         Alert.alert('Perfil Actualizado', 'Tus datos de servicio ministerial han sido guardados.');
       } else {
         const updated = await updateMyBasicProfile({
@@ -230,9 +424,61 @@ export default function ReservedProfileView({
     }
   };
 
+  const handleChangePasswordSubmit = async () => {
+    const nextFieldErrors: { current?: string; newPass?: string; confirm?: string } = {};
+
+    if (!currentPassword) {
+      nextFieldErrors.current = 'Ingresá tu contraseña actual.';
+    }
+    if (!newPassword) {
+      nextFieldErrors.newPass = 'Ingresá tu nueva contraseña.';
+    } else if (newPassword.length < 6) {
+      nextFieldErrors.newPass = 'La nueva contraseña debe tener al menos 6 caracteres.';
+    }
+    if (!confirmNewPassword) {
+      nextFieldErrors.confirm = 'Confirmá tu nueva contraseña.';
+    } else if (newPassword && newPassword !== confirmNewPassword) {
+      nextFieldErrors.confirm = 'Las nuevas contraseñas no coinciden.';
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setPasswordFieldErrors(nextFieldErrors);
+      setPasswordError('Revisá los campos indicados para actualizar tu contraseña.');
+      return;
+    }
+
+    setPasswordFieldErrors({});
+    setPasswordError(null);
+    setIsChangingPassword(true);
+
+    try {
+      await request<MessageResponse>(ENDPOINTS.AUTH_CHANGE_PASSWORD, {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      setShowPasswordModal(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmNewPassword(false);
+
+      Alert.alert(
+        'Contraseña Actualizada',
+        'Tu contraseña ha sido modificada exitosamente bajo protocolo seguro.'
+      );
+    } catch (err: any) {
+      setPasswordError(err.message || 'Error al cambiar la contraseña.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   const handleLogoutPress = () => {
     Alert.alert(
-      'Cierre Inmediato Seguro',
+      'Cerrar sesión',
       '¿Deseas cerrar la sesión activa y purgar las credenciales locales de este dispositivo?',
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -267,14 +513,40 @@ export default function ReservedProfileView({
       {/* 1. Discreet Identity Header Card */}
       <TacticalCard style={styles.identityCard} padding={18}>
         <View style={styles.identityRow}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatarInner}>
-              <InstitutionalEmblem size={52} />
+          {isChaplain ? (
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={handleSelectAvatarSource}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Cambiar foto de perfil ministerial"
+            >
+              <View style={styles.avatarInner}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} resizeMode="cover" />
+                ) : (
+                  <InstitutionalEmblem size={52} />
+                )}
+                {isUploadingAvatar && (
+                  <View style={styles.avatarLoadingOverlay}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.cameraBadge}>
+                <Camera size={11} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatarInner}>
+                <InstitutionalEmblem size={52} />
+              </View>
+              <View style={styles.onlineBadge}>
+                <View style={styles.onlineInnerDot} />
+              </View>
             </View>
-            <View style={styles.onlineBadge}>
-              <View style={styles.onlineInnerDot} />
-            </View>
-          </View>
+          )}
 
           <View style={styles.identityInfo}>
             <View style={styles.nameRow}>
@@ -537,7 +809,6 @@ export default function ReservedProfileView({
       {/* 4. Tactical Preferences Section */}
       <View style={styles.prefsHeader}>
         <Text style={styles.prefsTitle}>PROTOCOLOS DE PRIVACIDAD</Text>
-        <Text style={styles.prefsCount}>4 CONTROLES ACTIVOS</Text>
       </View>
 
       <TacticalCard style={styles.prefsCard} padding={0}>
@@ -561,7 +832,7 @@ export default function ReservedProfileView({
         <View style={styles.prefDivider} />
 
         {/* Option 2: Auto Purge History */}
-        <View style={styles.prefItem}>
+        {/* <View style={styles.prefItem}>
           <View style={styles.prefItemLeft}>
             <View style={styles.prefIconWrapper}>
               <Trash2 size={18} color={Theme.colors.secondary} />
@@ -580,12 +851,12 @@ export default function ReservedProfileView({
           >
             <View style={[styles.switchKnob, autoPurge ? styles.knobOn : styles.knobOff]} />
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         <View style={styles.prefDivider} />
 
         {/* Option 3: Silent Notifications */}
-        <View style={styles.prefItem}>
+        {/* <View style={styles.prefItem}>
           <View style={styles.prefItemLeft}>
             <View style={styles.prefIconWrapper}>
               <BellOff size={18} color={Theme.colors.secondary} />
@@ -604,12 +875,12 @@ export default function ReservedProfileView({
           >
             <View style={[styles.switchKnob, silentNotifs ? styles.knobOn : styles.knobOff]} />
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         <View style={styles.prefDivider} />
 
         {/* Option 4: Tactical Emergency Mode */}
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.prefItem}
           activeOpacity={0.8}
           onPress={() => {
@@ -629,12 +900,39 @@ export default function ReservedProfileView({
             </View>
           </View>
           <ChevronRight size={18} color={Theme.colors.onSurfaceVariant} />
+        </TouchableOpacity> */}
+
+        <View style={styles.prefDivider} />
+
+        {/* Option 5: Cambiar Contraseña */}
+        <TouchableOpacity
+          style={styles.prefItem}
+          activeOpacity={0.8}
+          onPress={() => {
+            setPasswordError(null);
+            setPasswordFieldErrors({});
+            setShowCurrentPassword(false);
+            setShowNewPassword(false);
+            setShowConfirmNewPassword(false);
+            setShowPasswordModal(true);
+          }}
+        >
+          <View style={styles.prefItemLeft}>
+            <View style={styles.prefIconWrapper}>
+              <Lock size={18} color={Theme.colors.secondary} />
+            </View>
+            <View style={styles.prefTextCol}>
+              <Text style={styles.prefItemTitle}>Cambiar Contraseña</Text>
+              <Text style={styles.prefItemSub}>Actualizar clave segura de acceso</Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={Theme.colors.onSurfaceVariant} />
         </TouchableOpacity>
       </TacticalCard>
 
       {/* 5. Quick Logout / Cierre Inmediato Seguro */}
       <TacticalButton
-        title="Cierre Inmediato Seguro"
+        title="Cerrar la sesión"
         onPress={handleLogoutPress}
         variant="primary"
         size="lg"
@@ -722,6 +1020,186 @@ export default function ReservedProfileView({
           </View>
         </View>
       </Modal>
+
+      {/* Password Change Modal */}
+      <Modal
+        visible={showPasswordModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!isChangingPassword) setShowPasswordModal(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, isTablet && styles.tabletModalCard]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Lock size={18} color={Theme.colors.tacticalNavy} />
+                <Text style={styles.modalHeaderTitle}>Actualizar Contraseña</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowPasswordModal(false)}
+                disabled={isChangingPassword}
+                style={styles.modalCloseBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={18} color={Theme.colors.onSurfaceVariant} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Ingresá tu contraseña actual y definí tu nueva clave de acceso seguro (mínimo 6 caracteres).
+            </Text>
+
+            {passwordError ? (
+              <View style={styles.passwordErrorBox}>
+                <Text style={styles.passwordErrorText}>{passwordError}</Text>
+              </View>
+            ) : null}
+
+            <Text style={[styles.fieldLabel, passwordFieldErrors.current && styles.fieldLabelError]}>
+              CONTRASEÑA ACTUAL
+            </Text>
+            <View style={[styles.inputWrapper, passwordFieldErrors.current && styles.inputWrapperError]}>
+              <Lock
+                size={16}
+                color={passwordFieldErrors.current ? Theme.colors.error : Theme.colors.onSurfaceVariant}
+              />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Tu contraseña actual"
+                placeholderTextColor={Theme.colors.onSurfaceVariant}
+                secureTextEntry={!showCurrentPassword}
+                autoCapitalize="none"
+                value={currentPassword}
+                onChangeText={(text) => {
+                  setCurrentPassword(text);
+                  if (passwordFieldErrors.current) {
+                    setPasswordFieldErrors((prev) => ({ ...prev, current: undefined }));
+                  }
+                  if (passwordError) setPasswordError(null);
+                }}
+              />
+              <TouchableOpacity
+                style={styles.eyeToggleBtn}
+                onPress={() => setShowCurrentPassword((prev) => !prev)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showCurrentPassword ? (
+                  <EyeOff size={18} color={Theme.colors.secondary} />
+                ) : (
+                  <Eye size={18} color={Theme.colors.secondary} />
+                )}
+              </TouchableOpacity>
+            </View>
+            {passwordFieldErrors.current ? (
+              <Text style={styles.fieldErrorText}>{passwordFieldErrors.current}</Text>
+            ) : null}
+
+            <Text style={[styles.fieldLabel, passwordFieldErrors.newPass && styles.fieldLabelError]}>
+              NUEVA CONTRASEÑA
+            </Text>
+            <View style={[styles.inputWrapper, passwordFieldErrors.newPass && styles.inputWrapperError]}>
+              <Key
+                size={16}
+                color={passwordFieldErrors.newPass ? Theme.colors.error : Theme.colors.onSurfaceVariant}
+              />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Nueva contraseña (min 6 caracteres)"
+                placeholderTextColor={Theme.colors.onSurfaceVariant}
+                secureTextEntry={!showNewPassword}
+                autoCapitalize="none"
+                value={newPassword}
+                onChangeText={(text) => {
+                  setNewPassword(text);
+                  if (passwordFieldErrors.newPass) {
+                    setPasswordFieldErrors((prev) => ({ ...prev, newPass: undefined }));
+                  }
+                  if (confirmNewPassword && text === confirmNewPassword && passwordFieldErrors.confirm) {
+                    setPasswordFieldErrors((prev) => ({ ...prev, confirm: undefined }));
+                  }
+                  if (passwordError) setPasswordError(null);
+                }}
+              />
+              <TouchableOpacity
+                style={styles.eyeToggleBtn}
+                onPress={() => setShowNewPassword((prev) => !prev)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showNewPassword ? (
+                  <EyeOff size={18} color={Theme.colors.secondary} />
+                ) : (
+                  <Eye size={18} color={Theme.colors.secondary} />
+                )}
+              </TouchableOpacity>
+            </View>
+            {passwordFieldErrors.newPass ? (
+              <Text style={styles.fieldErrorText}>{passwordFieldErrors.newPass}</Text>
+            ) : null}
+
+            <Text style={[styles.fieldLabel, passwordFieldErrors.confirm && styles.fieldLabelError]}>
+              CONFIRMAR NUEVA CONTRASEÑA
+            </Text>
+            <View style={[styles.inputWrapper, passwordFieldErrors.confirm && styles.inputWrapperError]}>
+              <Key
+                size={16}
+                color={passwordFieldErrors.confirm ? Theme.colors.error : Theme.colors.onSurfaceVariant}
+              />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Reingrese la nueva contraseña"
+                placeholderTextColor={Theme.colors.onSurfaceVariant}
+                secureTextEntry={!showConfirmNewPassword}
+                autoCapitalize="none"
+                value={confirmNewPassword}
+                onChangeText={(text) => {
+                  setConfirmNewPassword(text);
+                  if (newPassword && text && newPassword !== text) {
+                    setPasswordFieldErrors((prev) => ({
+                      ...prev,
+                      confirm: 'Las contraseñas no coinciden aún.',
+                    }));
+                  } else if (passwordFieldErrors.confirm) {
+                    setPasswordFieldErrors((prev) => ({ ...prev, confirm: undefined }));
+                  }
+                  if (passwordError) setPasswordError(null);
+                }}
+              />
+              <TouchableOpacity
+                style={styles.eyeToggleBtn}
+                onPress={() => setShowConfirmNewPassword((prev) => !prev)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showConfirmNewPassword ? (
+                  <EyeOff size={18} color={Theme.colors.secondary} />
+                ) : (
+                  <Eye size={18} color={Theme.colors.secondary} />
+                )}
+              </TouchableOpacity>
+            </View>
+            {passwordFieldErrors.confirm ? (
+              <Text style={styles.fieldErrorText}>{passwordFieldErrors.confirm}</Text>
+            ) : null}
+
+            <TacticalButton
+              title="Guardar Nueva Contraseña"
+              variant="secondary"
+              size="md"
+              loading={isChangingPassword}
+              onPress={handleChangePasswordSubmit}
+              style={{ marginTop: 14 }}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   );
 }
@@ -756,6 +1234,33 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: Theme.colors.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    ...globalStyles.shadowSm,
+  },
+  avatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  avatarLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Theme.colors.tacticalNavy,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     ...globalStyles.shadowSm,
@@ -1170,5 +1675,36 @@ const styles = StyleSheet.create({
   forceOptionTextSelected: {
     fontFamily: Theme.fonts.bodySemiBold,
     color: Theme.colors.tacticalNavy,
+  },
+  passwordErrorBox: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: Theme.roundness.sm,
+    padding: 10,
+    marginBottom: 12,
+  },
+  passwordErrorText: {
+    ...globalStyles.bodySm,
+    color: Theme.colors.error,
+    fontSize: 12,
+  },
+  fieldLabelError: {
+    color: Theme.colors.error,
+  },
+  inputWrapperError: {
+    borderColor: Theme.colors.error,
+    backgroundColor: '#FFF5F5',
+  },
+  eyeToggleBtn: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fieldErrorText: {
+    ...globalStyles.bodySm,
+    color: Theme.colors.error,
+    fontSize: 11,
+    marginTop: -6,
+    marginBottom: 8,
+    marginLeft: 4,
   },
 });

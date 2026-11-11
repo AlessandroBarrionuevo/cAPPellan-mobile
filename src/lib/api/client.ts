@@ -53,9 +53,10 @@ export function getClientToken(): string | null {
 
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = activeAuthToken;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     'Accept': 'application/json',
     ...(token ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` } : {}),
     ...(activeClientToken ? { 'X-Client-Token': activeClientToken } : {}),
@@ -72,18 +73,18 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   });
 
   if (!response.ok) {
-    let body: { error?: string } | undefined;
+    let body: { error?: string; message?: string; detail?: string } | undefined;
     try {
       body = await response.json();
     } catch {
       // Body not json
     }
 
-    let message = body?.error || response.statusText || 'Unknown error';
+    let message = body?.error || body?.message || body?.detail || response.statusText || 'Unknown error';
     if (response.status === 429) {
-      message = body?.error || 'Demasiadas peticiones. Por favor, aguardá unos segundos antes de reintentar.';
+      message = body?.error || body?.message || 'Demasiadas peticiones. Por favor, aguardá unos segundos antes de reintentar.';
     } else if (response.status === 409) {
-      message = body?.error || 'El período de reconexión expiró o la sesión ya finalizó.';
+      message = body?.error || body?.message || 'El período de reconexión expiró o la sesión ya finalizó.';
     }
 
     const error = new ApiError(message, response.status, body);

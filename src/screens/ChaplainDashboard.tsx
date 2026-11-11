@@ -14,9 +14,11 @@ import { request, setClientToken, ApiError } from '../lib/api/client';
 import { ENDPOINTS } from '../lib/api/endpoints';
 import { useAppInsets } from '../lib/safeArea';
 import { dismissIncomingCallNotifications } from '../lib/notifications';
+import { getChaplainProfile } from '../lib/api/profiles';
 import DutyConsole from '../components/duty/DutyConsole';
 import { NewReportModalPreview } from '../components/reports/NewReportModalPreview';
 import { SharedDashboardWidgets, DashboardHeader } from '../components/dashboard';
+import { AppPreloader, ENABLE_APP_PRELOADER } from '../components/common';
 import type { CallResponse, SessionType, PostCallReport } from '../types/api';
 
 export interface ChaplainDashboardProps {
@@ -49,12 +51,53 @@ export default function ChaplainDashboard({
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isDashboardReady, setIsDashboardReady] = useState(false);
+  const [showPreloader, setShowPreloader] = useState<boolean>(ENABLE_APP_PRELOADER);
 
   const status = useChaplainStore((state) => state.status);
   const toggleStatus = useChaplainStore((state) => state.toggleStatus);
   const assignedCall = useChaplainStore((state) => state.assignedCall);
   const setAssignedCall = useChaplainStore((state) => state.setAssignedCall);
   const user = useAuthStore((state) => state.user);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl || null);
+
+  // Synchronize avatar from user in auth store if it updates
+  useEffect(() => {
+    if (user?.avatarUrl !== undefined) {
+      setAvatarUrl(user.avatarUrl);
+    }
+  }, [user?.avatarUrl]);
+
+  // Fetch freshest chaplain profile to guarantee profile picture is consumed
+  useEffect(() => {
+    let isMounted = true;
+    if (user?.userId && user?.role === 'CHAPLAIN') {
+      getChaplainProfile(user.userId)
+        .then((profile) => {
+          if (!isMounted || !profile) return;
+          if (profile.avatarUrl) {
+            setAvatarUrl(profile.avatarUrl);
+          }
+          const currentUser = useAuthStore.getState().user;
+          if (
+            currentUser &&
+            (currentUser.avatarUrl !== profile.avatarUrl || currentUser.fullName !== profile.fullName)
+          ) {
+            useAuthStore.getState().setUser({
+              ...currentUser,
+              avatarUrl: profile.avatarUrl || null,
+              fullName: profile.fullName || currentUser.fullName,
+            });
+          }
+        })
+        .catch((err) => {
+          console.log('[ChaplainDashboard] Chaplain profile not found or offline:', err);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.userId, user?.role]);
 
   // Trigger report modal if a call just ended
   useEffect(() => {
@@ -124,6 +167,8 @@ export default function ChaplainDashboard({
         user={user}
         greeting="Servicio Pastoral"
         roleBadge="CAPELLÁN"
+        showAvatar={true}
+        avatarUrl={avatarUrl}
       />
 
       <ScrollView
@@ -169,6 +214,7 @@ export default function ChaplainDashboard({
           onJoinCall={onJoinCall}
           onJoinChat={onJoinChat}
           showRoster={true}
+          onInitialLoadComplete={() => setIsDashboardReady(true)}
         />
       </View>
 
@@ -193,6 +239,13 @@ export default function ChaplainDashboard({
         }}
       />
     </ScrollView>
+    {showPreloader ? (
+      <AppPreloader
+        isAppReady={isDashboardReady}
+        subtitle="CONSOLA DE CAPELLANÍA"
+        onFinish={() => setShowPreloader(false)}
+      />
+    ) : null}
     </View>
   );
 }

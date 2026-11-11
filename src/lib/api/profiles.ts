@@ -58,3 +58,35 @@ export async function updateMyBasicProfile(
     body: JSON.stringify(payload),
   });
 }
+
+export interface FileUploadResponse {
+  key: string;
+  publicUrl: string;
+  sizeBytes: number;
+  contentType: string;
+}
+
+/**
+ * Upload an avatar image directly to storage (Cloudflare R2 via backend).
+ */
+export async function uploadAvatarFile(uri: string): Promise<string> {
+  const filename = uri.split('/').pop() || 'avatar.jpg';
+  const match = /\.(\w+)$/.exec(filename);
+  const ext = match ? match[1].toLowerCase() : 'jpg';
+  const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri,
+    name: filename,
+    type,
+  } as any);
+  formData.append('folder', 'avatars');
+
+  const response = await request<FileUploadResponse>(ENDPOINTS.STORAGE_UPLOAD, {
+    method: 'POST',
+    body: formData,
+  });
+
+  return response.publicUrl || response.key;
+}

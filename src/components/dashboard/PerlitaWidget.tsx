@@ -18,6 +18,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import type { Perlita } from '../../types/bible';
+import { DEFAULT_FALLBACK_PERLITA } from '../../data/perlitasData';
 import {
   syncPerlitaToAndroidWidget,
   pinPerlitaWidgetToHomeScreen,
@@ -101,11 +102,10 @@ export function PerlitaWidget({
     }
   };
 
-  const fullText =
-    perlita?.text ||
-    'Mira que te mando que te esfuerces y seas valiente; no temas ni desmayes, porque el Señor tu Dios estará contigo en cada servicio, patrulla y misión.';
-  const referenceText = perlita?.reference || 'Josué 1:9';
-  const translationText = perlita?.translation || 'PDDPT';
+  const fullText = perlita?.text || DEFAULT_FALLBACK_PERLITA.text;
+  const referenceText = perlita?.reference || DEFAULT_FALLBACK_PERLITA.reference;
+  const translationText =
+    perlita?.translation || DEFAULT_FALLBACK_PERLITA.translation;
   const displayDate = formatWidgetDate(perlita?.date);
 
   // --- Typewriter Text Effect (Faithfully ported from Frontend AnimatedQuoteBlock) ---
@@ -165,9 +165,7 @@ export function PerlitaWidget({
             <Text style={styles.bannerTitleText}>
               {isRandom ? 'PERLITA DE GUARDIA' : 'PERLITA DEL DÍA'}
             </Text>
-            <Text style={styles.bannerSubtitleText}>
-              {isRandom ? 'Inspiración de Guardia' : 'Alimento Espiritual Diario'}
-            </Text>
+             <Text style={styles.bannerDateText}>{displayDate}</Text>
           </View>
         </View>
 
@@ -175,7 +173,7 @@ export function PerlitaWidget({
           <View style={styles.translationBadge}>
             <Text style={styles.translationBadgeText}>{translationText}</Text>
           </View>
-          <Text style={styles.bannerDateText}>{displayDate}</Text>
+         
         </View>
       </View>
 

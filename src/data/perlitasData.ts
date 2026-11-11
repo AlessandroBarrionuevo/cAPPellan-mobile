@@ -1,3 +1,5 @@
+import type { Perlita as BiblePerlita } from '../types/bible';
+
 export interface PerlitaForce {
   id: string;
   phrase: string;
@@ -10,7 +12,7 @@ export interface PerlitaForce {
 export const PERLITAS_DATA: PerlitaForce[] = [
   {
     id: 'pf-1',
-    phrase: 'Mira que te mando que te esfuerces y seas valiente; no temas ni desmayes, porque el Señor tu Dios estará contigo en cada servicio, patrulla y misión.',
+    phrase: '¿No te lo ordené Yo? ¡Sé fuerte y valiente! No temas ni desmayes, porque Yavé tu ʼElohim está contigo dondequiera que vayas.',
     author: 'Voz Pastoral de Guardia',
     category: 'Fortaleza Operativa',
     verseReference: 'Josué 1:9',
@@ -18,7 +20,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-2',
-    phrase: 'El que habita al abrigo del Altísimo morará bajo la sombra del Omnipotente. Escudo y protección es su verdad; no temerás el peligro nocturno.',
+    phrase: 'El que mora al abrigo del ʼElyón Morará bajo la sombra del Shadday. Diré yo a Yavé: ¡Refugio mío y Fortaleza mía, Mi ʼElohim, en Quien confío! Él te librará de la trampa del cazador, Y de la mortal pestilencia. Con sus plumas te cubrirá, Y debajo de sus alas te refugiarás. Escudo y adarga es su verdad.',
     author: 'Cobertura en el Servicio',
     category: 'Guardia & Cobertura',
     verseReference: 'Salmos 91:1-4',
@@ -26,7 +28,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-3',
-    phrase: 'El Señor te guardará de todo mal; Él cuidará tu vida. El Señor protegerá tu salida al servicio y tu retorno seguro al calor del hogar.',
+    phrase: 'Yavé te protegerá de todo mal. Él guardará tu alma. Yavé guardará tu salida y tu entrada Desde ahora y para siempre.',
     author: 'Promesa de Retorno',
     category: 'Retorno Seguro',
     verseReference: 'Salmos 121:7-8',
@@ -34,7 +36,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-4',
-    phrase: 'Bienaventurados los que con integridad procuran la paz y la justicia, porque en su entrega se refleja el verdadero carácter de Dios.',
+    phrase: 'Inmensamente felices los que procuran la paz, porque ellos serán llamados hijos de Dios.',
     author: 'Vocación & Deber',
     category: 'Vocación de Paz',
     verseReference: 'Mateo 5:9',
@@ -42,7 +44,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-5',
-    phrase: 'No nos ha dado Dios espíritu de cobardía ni de turbación, sino de poder, de amor fraternal y de dominio propio ante la emergencia.',
+    phrase: 'Porque Dios no nos dio espíritu de cobardía, sino de poder, de amor y de dominio propio.',
     author: 'Templanza Táctica',
     category: 'Templanza en Crisis',
     verseReference: '2 Timoteo 1:7',
@@ -50,7 +52,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-6',
-    phrase: 'Él da esfuerzo al camarada fatigado y multiplica las fuerzas cuando el cansancio arrecia. Los que esperan en el Señor renovarán su vigor como las águilas.',
+    phrase: 'Él fortalece al cansado y aumenta la fuerza al que no tiene vigor. Aun los muchachos se fatigan y se cansan. Los jóvenes tropiezan y caen, pero los que esperan en Yavé tienen nuevas fuerzas. Levantarán las alas como águilas, correrán y no se cansarán, caminarán y no se fatigarán.',
     author: 'Aliento en el Desgaste',
     category: 'Cansancio & Aliento',
     verseReference: 'Isaías 40:29-31',
@@ -58,7 +60,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-7',
-    phrase: 'El Señor es mi luz y mi escudo protector; ¿a quién temeré? El Señor es la fortaleza inexpugnable de mi vida; ante nada habré de doblegarme.',
+    phrase: 'Yavé es mi Luz y mi Salvación, ¿De quién temeré? Yavé es la Fortaleza de mi vida, ¿De quién me aterrorizaré?',
     author: 'Firmeza Moral',
     category: 'Fortaleza Operativa',
     verseReference: 'Salmos 27:1',
@@ -66,7 +68,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-8',
-    phrase: 'No cargues en soledad el peso de la guardia; derrama tus inquietudes delante de Dios. Y su paz, que sobrepasa todo entendimiento, guardará tu corazón.',
+    phrase: 'Por nada estén ansiosos, sino sean conocidas sus peticiones ante Dios, en toda conversación con Dios y súplica, con acción de gracias. La paz de Dios, que sobrepasa todo entendimiento, guardará sus corazones y sus pensamientos en Cristo Jesús.',
     author: 'Cuidado y Desahogo Pastoral',
     category: 'Templanza en Crisis',
     verseReference: 'Filipenses 4:6-7',
@@ -74,7 +76,7 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-9',
-    phrase: 'No nos cansemos de hacer el bien, de cuidar al compañero y de proteger al desvalido; porque a su tiempo cosecharemos con honor si perseveramos.',
+    phrase: 'No desmayemos en hacer lo bueno, porque si no desmayamos, a su tiempo cosecharemos.',
     author: 'Abnegación y Camaradería',
     category: 'Vocación de Paz',
     verseReference: 'Gálatas 6:9',
@@ -82,40 +84,30 @@ export const PERLITAS_DATA: PerlitaForce[] = [
   },
   {
     id: 'pf-10',
-    phrase: 'Dios es nuestro amparo y fortaleza, nuestro pronto y seguro auxilio en medio de la adversidad. Por tanto, no temeremos aunque la tormenta golpee fuerte.',
+    phrase: 'ʼElohim es nuestro Refugio y Fortaleza, Un auxilio muy presente en la tribulación. Por tanto, no temeremos aunque la tierra sea removida, Y las montañas se traspasen al corazón del mar, Aunque bramen y espumen sus aguas, Y tiemblen las montañas a causa de su ímpetu. Selah',
     author: 'Refugio Ministerial',
     category: 'Guardia & Cobertura',
-    verseReference: 'Salmos 46:1-2',
+    verseReference: 'Salmos 46:1-3',
     reflection: 'Aun en las circunstancias operativas más complejas, nunca estás desamparado. Hay una roca firme bajo tus pies que sostiene tu vida.',
   },
 ];
 
+export const DEFAULT_FALLBACK_PERLITA = {
+  reference: PERLITAS_DATA[0].verseReference,
+  text: PERLITAS_DATA[0].phrase,
+  translation: 'PDDPT',
+} as const;
+
 export type Perlita = PerlitaForce;
 
-/**
- * Returns deterministic Forces Perlita for today (modulo day-of-year)
- */
-export function getDeterministicForcePerlita(dateStr?: string): {
-  date: string;
-  translation: string;
-  reference: string;
-  text: string;
-  attribution: string;
-} {
-  const now = dateStr ? new Date(dateStr) : new Date();
-  const startOfYear = new Date(now.getFullYear(), 0, 0);
-  const diff = now.getTime() - startOfYear.getTime();
-  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const index = Math.abs(dayOfYear) % PERLITAS_DATA.length;
-  const item = PERLITAS_DATA[index];
-
+function toBiblePerlita(item: PerlitaForce, now: Date): BiblePerlita {
   return {
     date: now.toLocaleDateString('es-AR', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
     }),
-    translation: 'Biblia de la Guardia · RVA-2015',
+    translation: 'PDDPT',
     reference: item.verseReference,
     text: item.phrase,
     attribution: `${item.author} (${item.category})`,
@@ -123,28 +115,22 @@ export function getDeterministicForcePerlita(dateStr?: string): {
 }
 
 /**
+ * Returns deterministic Forces Perlita for today (modulo day-of-year)
+ */
+export function getDeterministicForcePerlita(dateStr?: string): BiblePerlita {
+  const now = dateStr ? new Date(dateStr) : new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 0);
+  const diff = now.getTime() - startOfYear.getTime();
+  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const index = Math.abs(dayOfYear) % PERLITAS_DATA.length;
+
+  return toBiblePerlita(PERLITAS_DATA[index], now);
+}
+
+/**
  * Returns a random Forces Perlita
  */
-export function getRandomForcePerlita(): {
-  date: string;
-  translation: string;
-  reference: string;
-  text: string;
-  attribution: string;
-} {
+export function getRandomForcePerlita(): BiblePerlita {
   const index = Math.floor(Math.random() * PERLITAS_DATA.length);
-  const item = PERLITAS_DATA[index];
-  const now = new Date();
-
-  return {
-    date: now.toLocaleDateString('es-AR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-    }),
-    translation: 'Biblia de la Guardia · RVA-2015',
-    reference: item.verseReference,
-    text: item.phrase,
-    attribution: `${item.author} (${item.category})`,
-  };
+  return toBiblePerlita(PERLITAS_DATA[index], new Date());
 }

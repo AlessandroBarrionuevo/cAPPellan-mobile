@@ -18,12 +18,17 @@ import {
   TacticalCard,
   ConfidentialityBanner,
 } from '../components/common';
-import { Mail, Lock, ShieldCheck, Check } from 'lucide-react-native';
+import { Mail, Lock, ShieldCheck, Check, AlertCircle } from 'lucide-react-native';
 
 interface LoginScreenProps {
   onSuccess?: () => void;
   onNavigateToRegister?: () => void;
   onNavigateToForgotPassword?: () => void;
+}
+
+interface LoginFieldErrors {
+  username?: string;
+  password?: string;
 }
 
 export default function LoginScreen({
@@ -35,24 +40,38 @@ export default function LoginScreen({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberDevice, setRememberDevice] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
+  const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const login = useAuthStore((state) => state.login);
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError('Por favor ingresá tu correo o credencial y contraseña.');
+    const nextFieldErrors: LoginFieldErrors = {};
+    if (!username.trim()) {
+      nextFieldErrors.username = 'Ingresá tu correo o credencial institucional.';
+    }
+    if (!password.trim()) {
+      nextFieldErrors.password = 'Ingresá tu contraseña de seguridad.';
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      setAuthError(null);
       return;
     }
 
-    setError(null);
+    setFieldErrors({});
+    setAuthError(null);
     setLoading(true);
     try {
       await login(username.trim(), password.trim());
       onSuccess?.();
     } catch (err: any) {
-      setError(err.message || 'Credenciales inválidas o error de conexión.');
+      setAuthError(
+        err.message ||
+          'El usuario o la contraseña ingresados son incorrectos. Verificá tus datos e intentá nuevamente.'
+      );
     } finally {
       setLoading(false);
     }
@@ -105,8 +124,21 @@ export default function LoginScreen({
             label="CORREO ELECTRÓNICO O CREDENCIAL"
             placeholder="Ej. nombre@gmail.com o legajo"
             value={username}
-            onChangeText={setUsername}
-            leftIcon={<Mail size={18} color={Theme.colors.secondary} />}
+            onChangeText={(text) => {
+              setUsername(text);
+              if (fieldErrors.username) {
+                setFieldErrors((prev) => ({ ...prev, username: undefined }));
+              }
+              if (authError) setAuthError(null);
+            }}
+            leftIcon={
+              <Mail
+                size={18}
+                color={fieldErrors.username || authError ? Theme.colors.error : Theme.colors.secondary}
+              />
+            }
+            error={fieldErrors.username}
+            hasErrorBorder={Boolean(authError)}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -116,11 +148,36 @@ export default function LoginScreen({
             label="CONTRASEÑA DE SEGURIDAD"
             placeholder="••••••••••••"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (fieldErrors.password) {
+                setFieldErrors((prev) => ({ ...prev, password: undefined }));
+              }
+              if (authError) setAuthError(null);
+            }}
             isPassword
-            leftIcon={<Lock size={18} color={Theme.colors.secondary} />}
-            error={error}
+            leftIcon={
+              <Lock
+                size={18}
+                color={fieldErrors.password || authError ? Theme.colors.error : Theme.colors.secondary}
+              />
+            }
+            error={fieldErrors.password}
+            hasErrorBorder={Boolean(authError)}
           />
+
+          {/* Form-level Authentication / Server Error Banner */}
+          {authError ? (
+            <View style={styles.errorBanner}>
+              <View style={styles.errorBannerIconWrap}>
+                <AlertCircle size={18} color="#DC2626" />
+              </View>
+              <View style={styles.errorBannerContent}>
+                <Text style={styles.errorBannerTitle}>No se pudo iniciar sesión</Text>
+                <Text style={styles.errorBannerText}>{authError}</Text>
+              </View>
+            </View>
+          ) : null}
 
           {/* Utilities: Remember Device & Forgot Password */}
           <View style={styles.utilsRow}>
@@ -263,6 +320,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 18,
     lineHeight: 18,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  errorBannerIconWrap: {
+    marginRight: 9,
+    marginTop: 1,
+  },
+  errorBannerContent: {
+    flex: 1,
+  },
+  errorBannerTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  errorBannerText: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#B91C1C',
   },
   utilsRow: {
     flexDirection: 'row',

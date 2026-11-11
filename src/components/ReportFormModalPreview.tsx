@@ -201,14 +201,14 @@ export default function ReportFormModalPreview({
             <View style={styles.formGroup}>
               <View style={styles.labelRow}>
                 <Text style={styles.label}>NIVEL DE GRAVEDAD</Text>
-                <Text
+                {/* <Text
                   style={[
                     styles.severityLabel,
                     { color: SEVERITY_COLORS[severity]?.color || '#0C7AE0' },
                   ]}
                 >
                   {SEVERITY_COLORS[severity]?.label}
-                </Text>
+                </Text> */}
               </View>
 
               <View style={styles.severityRow}>

@@ -9,7 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Theme, globalStyles } from '../../theme/Theme';
-import { Eye, EyeOff } from 'lucide-react-native';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react-native';
 
 interface TacticalInputProps extends TextInputProps {
   label?: string;
@@ -17,6 +17,7 @@ interface TacticalInputProps extends TextInputProps {
   leftIcon?: React.ReactNode;
   isPassword?: boolean;
   error?: string | null;
+  hasErrorBorder?: boolean;
   containerStyle?: ViewStyle;
 }
 
@@ -26,16 +27,22 @@ export function TacticalInput({
   leftIcon,
   isPassword = false,
   error,
+  hasErrorBorder = false,
   containerStyle,
   ...inputProps
 }: TacticalInputProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const showErrorState = Boolean(error) || hasErrorBorder;
 
   return (
     <View style={[styles.wrapper, containerStyle]}>
       {(label || badgeText) && (
         <View style={styles.labelRow}>
-          {label && <Text style={styles.label}>{label}</Text>}
+          {label && (
+            <Text style={[styles.label, showErrorState && styles.labelError]}>
+              {label}
+            </Text>
+          )}
           {badgeText && <Text style={styles.badge}>{badgeText}</Text>}
         </View>
       )}
@@ -43,7 +50,7 @@ export function TacticalInput({
       <View
         style={[
           styles.inputContainer,
-          error ? styles.inputError : null,
+          showErrorState ? styles.inputError : null,
         ]}
       >
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
@@ -72,7 +79,12 @@ export function TacticalInput({
         )}
       </View>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <View style={styles.errorRow}>
+          <AlertCircle size={13} color={Theme.colors.error} style={styles.errorIcon} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -94,6 +106,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.6,
   },
+  labelError: {
+    color: Theme.colors.error,
+  },
   badge: {
     ...globalStyles.labelCaps,
     fontSize: 9,
@@ -110,12 +125,12 @@ const styles = StyleSheet.create({
     borderRadius: Theme.roundness.md,
     paddingHorizontal: 12,
     height: 48,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'transparent',
   },
   inputError: {
     borderColor: Theme.colors.error,
-    backgroundColor: '#FFF4F4',
+    backgroundColor: '#FFF5F5',
   },
   leftIcon: {
     marginRight: 10,
@@ -134,11 +149,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+    paddingHorizontal: 2,
+  },
+  errorIcon: {
+    marginRight: 5,
+  },
   errorText: {
     ...globalStyles.bodySm,
     color: Theme.colors.error,
     fontSize: 12,
-    marginTop: 4,
+    lineHeight: 16,
+    flex: 1,
   },
 });
 

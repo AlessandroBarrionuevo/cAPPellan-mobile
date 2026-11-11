@@ -116,7 +116,7 @@ const PrayerCreateCard = React.memo(function PrayerCreateCard({
 
       <View style={styles.quoteRow}>
         <Text style={styles.scriptureQuote}>
-          «Llevad los unos las cargas de los otros, y cumplid así la ley de Cristo.»{' '}
+          «Sobrelleven los unos las cargas de los otros, y cumplirán así la Ley de Cristo.»{' '}
           <Text style={styles.scriptureRef}>GÁLATAS 6:2</Text>
         </Text>
       </View>
@@ -191,7 +191,7 @@ const GratitudeCreateCard = React.memo(function GratitudeCreateCard({
 
       <View style={styles.quoteRow}>
         <Text style={styles.scriptureQuote}>
-          «Dad gracias en todo, porque esta es la voluntad de Dios para con vosotros en Cristo Jesús.»{' '}
+          «Den gracias en todo, porque esta es la voluntad de Dios para ustedes en Cristo Jesús.»{' '}
           <Text style={[styles.scriptureRef, { color: '#D97706' }]}>1 TESALONICENSES 5:18</Text>
         </Text>
       </View>

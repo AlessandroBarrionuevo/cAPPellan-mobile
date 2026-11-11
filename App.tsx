@@ -71,6 +71,7 @@ import BlogFeedScreen from './src/screens/BlogFeedScreen';
 import ReportsLogbookView from './src/components/reports/ReportsLogbookView';
 import IncomingSessionModal from './src/components/duty/IncomingSessionModal';
 import IncomingSessionModalPreview from './src/components/duty/IncomingSessionModalPreview';
+import { AppPreloader, ENABLE_APP_PRELOADER } from './src/components/common';
 import type { CallResponse, SessionType } from './src/types/api';
 
 export default function App() {
@@ -81,6 +82,7 @@ export default function App() {
   const [lastEndedSessionId, setLastEndedSessionId] = useState<number | null>(null);
   const [showIncomingModal, setShowIncomingModal] = useState(false);
   const [prayerWallTab, setPrayerWallTab] = useState<'prayer' | 'gratitude'>('prayer');
+  const [showPreloader, setShowPreloader] = useState<boolean>(ENABLE_APP_PRELOADER);
 
   const handleNavigateToPrayers = (tab?: 'prayer' | 'gratitude') => {
     if (tab) setPrayerWallTab(tab);
@@ -573,7 +575,9 @@ export default function App() {
     };
   }, [isAuthenticated, user?.role, chaplainStatus, inCallView, inChatView, setAssignedCall]);
 
-  if (!fontsLoaded || isLoading) {
+  const isAppReady = Boolean(fontsLoaded && !isLoading);
+
+  if (!isAppReady && !showPreloader) {
     return null;
   }
 
@@ -928,7 +932,14 @@ export default function App() {
 
   return (
     <SafeAppProvider style={{ flex: 1 }}>
-      {renderAppBody()}
+      {isAppReady ? renderAppBody() : null}
+      {showPreloader && (!isAppReady || !isAuthenticated || !user) ? (
+        <AppPreloader
+          isAppReady={isAppReady}
+          fontsLoaded={fontsLoaded}
+          onFinish={() => setShowPreloader(false)}
+        />
+      ) : null}
     </SafeAppProvider>
   );
 }

@@ -35,11 +35,47 @@ export interface AuthUser {
   role: AppRole;
   leaderId?: number | null;
   avatarUrl?: string | null;
+  fullName?: string | null;
 }
 
 export interface LoginResponse {
   token: string;
   role: AppRole;
+}
+
+export interface RegisterRequest {
+  username?: string;
+  email: string;
+  password: string;
+  alias?: string;
+  force?: string;
+  phone?: string;
+}
+
+export interface RegisterResponse {
+  id: number;
+  username: string;
+  role: AppRole;
+  token: string;
+}
+
+export interface ForgotPasswordRequest {
+  identifier: string;
+}
+
+export interface ResetPasswordRequest {
+  identifier: string;
+  code: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface MessageResponse {
+  message: string;
 }
 
 export type SessionType = 'VIDEO' | 'CHAT';

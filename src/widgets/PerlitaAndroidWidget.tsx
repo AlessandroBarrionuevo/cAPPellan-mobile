@@ -4,6 +4,7 @@ import {
   TextWidget,
 } from 'react-native-android-widget';
 import type { Perlita } from '../types/bible';
+import { DEFAULT_FALLBACK_PERLITA } from '../data/perlitasData';
 
 export interface PerlitaAndroidWidgetProps {
   perlita: Perlita;
@@ -42,10 +43,8 @@ export function PerlitaAndroidWidget({
   perlita,
   isRandom = false,
 }: PerlitaAndroidWidgetProps) {
-  const verseText =
-    perlita?.text ||
-    'Mira que te mando que te esfuerces y seas valiente; no temas ni desmayes, porque el Señor tu Dios estará contigo en cada servicio, patrulla y misión.';
-  const referenceText = perlita?.reference || 'Josué 1:9';
+  const verseText = perlita?.text || DEFAULT_FALLBACK_PERLITA.text;
+  const referenceText = perlita?.reference || DEFAULT_FALLBACK_PERLITA.reference;
   const displayDate = formatWidgetDate(perlita?.date);
 
   return (

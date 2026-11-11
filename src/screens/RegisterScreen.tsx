@@ -29,22 +29,36 @@ import {
   UserPlus,
   ArrowLeft,
   X,
+  AlertCircle,
 } from 'lucide-react-native';
+import { request, ApiError } from '../lib/api/client';
+import { ENDPOINTS } from '../lib/api/endpoints';
+import type { RegisterResponse } from '../types/api';
 
 interface RegisterScreenProps {
   onNavigateToLogin: () => void;
 }
 
+interface RegisterFieldErrors {
+  alias?: string;
+  force?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  terms?: string;
+}
+
 const FORCES = [
-  { id: 'pfa', label: 'Policía Federal Argentina' },
-  { id: 'ea', label: 'Ejército Argentino' },
-  { id: 'pna', label: 'Prefectura Naval Argentina' },
-  { id: 'gna', label: 'Gendarmería Nacional' },
-  { id: 'psa', label: 'Policía de Seguridad Aeroportuaria' },
-  { id: 'seg_privada', label: 'Seguridad Privada & Custodia' },
-  { id: 'retirado', label: 'Veterano / Cuadro en Retiro' },
-  { id: 'familiar', label: 'Familiar Directo en Contención' },
-  { id: 'prefiero_no_decir', label: 'Prefiero no decir' },
+  { id: 'POLICIA_DE_LA_CIUDAD', label: 'Policía de la Ciudad' },
+  // { id: 'pfa', label: 'Policía Federal Argentina' },
+  // { id: 'ea', label: 'Ejército Argentino' },
+  // { id: 'pna', label: 'Prefectura Naval Argentina' },
+  // { id: 'gna', label: 'Gendarmería Nacional' },
+  // { id: 'psa', label: 'Policía de Seguridad Aeroportuaria' },
+  // { id: 'seg_privada', label: 'Seguridad Privada & Custodia' },
+  // { id: 'retirado', label: 'Veterano / Cuadro en Retiro' },
+  // { id: 'familiar', label: 'Familiar Directo en Contención' },
+  // { id: 'prefiero_no_decir', label: 'Prefiero no decir' },
 ];
 
 export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProps) {
@@ -56,7 +70,9 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
   const [confirmPassword, setConfirmPassword] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showForceModal, setShowForceModal] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   // Dynamic password strength meter calculation
@@ -75,27 +91,102 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
 
   const strength = getPasswordStrength();
 
-  const handleRegisterSubmit = () => {
-    if (!alias.trim() || !email.trim() || !password || !confirmPassword) {
-      setError('Por favor completá todos los campos requeridos.');
-      return;
+  const clearFieldError = (field: keyof RegisterFieldErrors) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const updated = { ...prev };
+      delete updated[field];
+      return updated;
+    });
+    if (formError) {
+      setFormError(null);
     }
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
-      return;
+  };
+
+  const handleRegisterSubmit = async () => {
+    const nextErrors: RegisterFieldErrors = {};
+
+    if (!alias.trim()) {
+      nextErrors.alias = 'Ingresá tu nombre completo o alias operativo.';
+    } else if (alias.trim().length < 3) {
+      nextErrors.alias = 'El nombre o alias debe tener al menos 3 caracteres.';
     }
+
+    if (!email.trim()) {
+      nextErrors.email = 'Ingresá tu correo electrónico o credencial.';
+    } else if (email.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      nextErrors.email = 'El formato del correo electrónico no es válido.';
+    }
+
+    if (!password) {
+      nextErrors.password = 'Ingresá una contraseña para proteger tu cuenta.';
+    } else if (password.length < 6) {
+      nextErrors.password = 'La contraseña debe tener al menos 6 caracteres.';
+    }
+
+    if (!confirmPassword) {
+      nextErrors.confirmPassword = 'Repetí la contraseña elegida para confirmarla.';
+    } else if (password && password !== confirmPassword) {
+      nextErrors.confirmPassword = 'Las contraseñas ingresadas no coinciden.';
+    }
+
     if (!termsAccepted) {
-      setError('Debes aceptar los términos de confidencialidad y reserva pastoral.');
+      nextErrors.terms = 'Debés aceptar los términos de confidencialidad y reserva pastoral.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setFormError('Revisá los campos marcados en rojo para completar tu registro.');
       return;
     }
 
-    setError(null);
-    setSuccess(true);
-    Alert.alert(
-      'Cuenta Segura Creada',
-      'Tu cuenta institucional ha sido registrada bajo protocolo de estricta reserva. Ya podés iniciar sesión.',
-      [{ text: 'Iniciar Sesión', onPress: onNavigateToLogin }]
-    );
+    setFieldErrors({});
+    setFormError(null);
+    setLoading(true);
+
+    try {
+      await request<RegisterResponse>(ENDPOINTS.AUTH_REGISTER, {
+        method: 'POST',
+        body: JSON.stringify({
+          username: alias.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          alias: alias.trim(),
+          force: selectedForce || undefined,
+        }),
+      });
+
+      setSuccess(true);
+      Alert.alert(
+        'Cuenta Segura Creada',
+        'Tu cuenta institucional ha sido registrada bajo protocolo de estricta reserva. Ya podés iniciar sesión.',
+        [{ text: 'Iniciar Sesión', onPress: onNavigateToLogin }]
+      );
+    } catch (err: any) {
+      const msg: string =
+        err.message || 'No se pudo completar el registro. Verificá los datos e intentá nuevamente.';
+      const lowerMsg = msg.toLowerCase();
+      const serverFieldErrors: RegisterFieldErrors = {};
+
+      if (lowerMsg.includes('email') || lowerMsg.includes('correo')) {
+        serverFieldErrors.email = msg;
+      } else if (
+        lowerMsg.includes('username') ||
+        lowerMsg.includes('usuario') ||
+        lowerMsg.includes('alias')
+      ) {
+        serverFieldErrors.alias = msg;
+      } else if (lowerMsg.includes('password') || lowerMsg.includes('contraseña')) {
+        serverFieldErrors.password = msg;
+      }
+
+      if (Object.keys(serverFieldErrors).length > 0) {
+        setFieldErrors(serverFieldErrors);
+      }
+      setFormError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const selectedForceLabel =
@@ -151,16 +242,33 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
             badgeText="MODO SIGILO ADMITIDO"
             placeholder="Ej. Centurión-4 o Nombre Real"
             value={alias}
-            onChangeText={setAlias}
-            leftIcon={<Shield size={18} color={Theme.colors.secondary} />}
+            onChangeText={(text) => {
+              setAlias(text);
+              clearFieldError('alias');
+            }}
+            leftIcon={
+              <Shield
+                size={18}
+                color={fieldErrors.alias ? Theme.colors.error : Theme.colors.secondary}
+              />
+            }
+            error={fieldErrors.alias}
           />
 
           {/* Selector de Fuerza o Institución */}
           <View style={styles.forceSelectorGroup}>
-            <Text style={styles.fieldLabel}>FUERZA O INSTITUCIÓN PERTENECIENTE</Text>
+            <Text style={[styles.fieldLabel, fieldErrors.force && styles.fieldLabelError]}>
+              FUERZA O INSTITUCIÓN PERTENECIENTE
+            </Text>
             <TouchableOpacity
-              style={styles.forcePickerButton}
-              onPress={() => setShowForceModal(true)}
+              style={[
+                styles.forcePickerButton,
+                fieldErrors.force ? styles.forcePickerButtonError : null,
+              ]}
+              onPress={() => {
+                clearFieldError('force');
+                setShowForceModal(true);
+              }}
               activeOpacity={0.8}
             >
               <Text
@@ -172,8 +280,17 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
               >
                 {selectedForceLabel}
               </Text>
-              <ChevronDown size={18} color={Theme.colors.secondary} />
+              <ChevronDown
+                size={18}
+                color={fieldErrors.force ? Theme.colors.error : Theme.colors.secondary}
+              />
             </TouchableOpacity>
+            {fieldErrors.force ? (
+              <View style={styles.inlineErrorRow}>
+                <AlertCircle size={13} color={Theme.colors.error} style={styles.inlineErrorIcon} />
+                <Text style={styles.inlineErrorText}>{fieldErrors.force}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Correo o N° Credencial */}
@@ -181,19 +298,41 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
             label="CORREO ELECTRÓNICO O N° CREDENCIAL"
             placeholder="usuario@fuerza.gob.ar o legajo"
             value={email}
-            onChangeText={setEmail}
-            leftIcon={<Mail size={18} color={Theme.colors.secondary} />}
+            onChangeText={(text) => {
+              setEmail(text);
+              clearFieldError('email');
+            }}
+            leftIcon={
+              <Mail
+                size={18}
+                color={fieldErrors.email ? Theme.colors.error : Theme.colors.secondary}
+              />
+            }
             autoCapitalize="none"
+            keyboardType="email-address"
+            error={fieldErrors.email}
           />
 
           {/* Contraseña Blindada */}
           <TacticalInput
             label="CONTRASEÑA BLINDADA"
-            placeholder="Mínimo 8 caracteres tácticos"
+            placeholder="Mínimo 6 caracteres tácticos"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              clearFieldError('password');
+              if (confirmPassword && text === confirmPassword) {
+                clearFieldError('confirmPassword');
+              }
+            }}
             isPassword
-            leftIcon={<Lock size={18} color={Theme.colors.secondary} />}
+            leftIcon={
+              <Lock
+                size={18}
+                color={fieldErrors.password ? Theme.colors.error : Theme.colors.secondary}
+              />
+            }
+            error={fieldErrors.password}
           />
 
           {/* Dynamic Strength Meter */}
@@ -231,32 +370,81 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
             label="CONFIRMAR CONTRASEÑA BLINDADA"
             placeholder="Reingrese la contraseña elegida"
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              if (password && text && password !== text) {
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  confirmPassword: 'Las contraseñas no coinciden aún.',
+                }));
+              } else {
+                clearFieldError('confirmPassword');
+              }
+            }}
             isPassword
-            leftIcon={<Lock size={18} color={Theme.colors.secondary} />}
-            error={error}
+            leftIcon={
+              <Lock
+                size={18}
+                color={fieldErrors.confirmPassword ? Theme.colors.error : Theme.colors.secondary}
+              />
+            }
+            error={fieldErrors.confirmPassword}
           />
 
           {/* Checkbox Términos */}
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setTermsAccepted((prev) => !prev)}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.checkbox, termsAccepted && styles.checkboxActive]}>
-              {termsAccepted && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+          <View style={styles.termsWrapper}>
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => {
+                setTermsAccepted((prev) => {
+                  const next = !prev;
+                  if (next) clearFieldError('terms');
+                  return next;
+                });
+              }}
+              activeOpacity={0.8}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  termsAccepted && styles.checkboxActive,
+                  fieldErrors.terms && !termsAccepted ? styles.checkboxError : null,
+                ]}
+              >
+                {termsAccepted && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+              </View>
+              <Text style={styles.termsText}>
+                Acepto los términos de{' '}
+                <Text style={styles.termsUnderline}>confidencialidad inviolable</Text> y{' '}
+                <Text style={styles.termsUnderline}>reserva pastoral</Text> de acuerdo con las normativas vigentes.
+              </Text>
+            </TouchableOpacity>
+            {fieldErrors.terms ? (
+              <View style={styles.inlineErrorRow}>
+                <AlertCircle size={13} color={Theme.colors.error} style={styles.inlineErrorIcon} />
+                <Text style={styles.inlineErrorText}>{fieldErrors.terms}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Dedicated Bottom Form Error / Validation Banner */}
+          {formError ? (
+            <View style={styles.formErrorBanner}>
+              <View style={styles.formErrorIconWrap}>
+                <AlertCircle size={18} color="#DC2626" />
+              </View>
+              <View style={styles.formErrorContent}>
+                <Text style={styles.formErrorTitle}>Atención en el formulario</Text>
+                <Text style={styles.formErrorText}>{formError}</Text>
+              </View>
             </View>
-            <Text style={styles.termsText}>
-              Acepto los términos de{' '}
-              <Text style={styles.termsUnderline}>confidencialidad inviolable</Text> y{' '}
-              <Text style={styles.termsUnderline}>reserva pastoral</Text> de acuerdo con las normativas vigentes.
-            </Text>
-          </TouchableOpacity>
+          ) : null}
 
           {/* Submit Button */}
           <TacticalButton
             title="CREAR MI CUENTA SEGURA"
             onPress={handleRegisterSubmit}
+            loading={loading}
             variant="secondary"
             size="lg"
             leftIcon={<UserPlus size={18} color="#FFFFFF" />}
@@ -266,7 +454,7 @@ export default function RegisterScreen({ onNavigateToLogin }: RegisterScreenProp
 
         {/* Back to Login link */}
         <View style={styles.loginRow}>
-          <Text style={styles.loginRowText}>¿Ya dispones de credenciales activas? </Text>
+          <Text style={styles.loginRowText}>¿Ya tenes de cuenta? </Text>
           <TouchableOpacity onPress={onNavigateToLogin} activeOpacity={0.7}>
             <Text style={styles.loginLink}>Iniciar Sesión</Text>
           </TouchableOpacity>
@@ -414,6 +602,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginBottom: 6,
   },
+  fieldLabelError: {
+    color: Theme.colors.error,
+  },
   forceSelectorGroup: {
     marginBottom: 14,
   },
@@ -425,6 +616,28 @@ const styles = StyleSheet.create({
     borderRadius: Theme.roundness.md,
     paddingHorizontal: 12,
     height: 48,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  forcePickerButtonError: {
+    borderColor: Theme.colors.error,
+    backgroundColor: '#FFF5F5',
+  },
+  inlineErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+    paddingHorizontal: 2,
+  },
+  inlineErrorIcon: {
+    marginRight: 5,
+  },
+  inlineErrorText: {
+    ...globalStyles.bodySm,
+    color: Theme.colors.error,
+    fontSize: 12,
+    lineHeight: 16,
+    flex: 1,
   },
   forcePickerText: {
     fontFamily: Theme.fonts.body,
@@ -463,10 +676,12 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Theme.colors.surfaceContainerHigh,
   },
+  termsWrapper: {
+    marginVertical: 10,
+  },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginVertical: 10,
   },
   checkbox: {
     width: 20,
@@ -477,9 +692,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10,
     marginTop: 2,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
   checkboxActive: {
     backgroundColor: Theme.colors.secondary,
+  },
+  checkboxError: {
+    borderColor: Theme.colors.error,
+    backgroundColor: '#FFF5F5',
+  },
+  formErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  formErrorIconWrap: {
+    marginRight: 9,
+    marginTop: 1,
+  },
+  formErrorContent: {
+    flex: 1,
+  },
+  formErrorTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  formErrorText: {
+    ...globalStyles.bodySm,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#B91C1C',
   },
   termsText: {
     ...globalStyles.bodySm,
@@ -497,7 +749,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   loginRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,

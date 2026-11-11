@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Theme, globalStyles } from '../theme/Theme';
 import { SharedDashboardWidgets, DashboardHeader } from '../components/dashboard';
+import { AppPreloader, ENABLE_APP_PRELOADER } from '../components/common';
 import { useAuthStore } from '../lib/stores/auth';
 import { useAppInsets } from '../lib/safeArea';
 import { Tv, Plus, BookOpen, FileText, Sparkles } from 'lucide-react-native';
@@ -34,6 +35,8 @@ export default function ChaplainContentDashboard({
   const insets = useAppInsets();
   const user = useAuthStore((state) => state.user);
   const isTablet = width > 500;
+  const [isDashboardReady, setIsDashboardReady] = useState(false);
+  const [showPreloader, setShowPreloader] = useState<boolean>(ENABLE_APP_PRELOADER);
 
   return (
     <View style={styles.container}>
@@ -104,19 +107,28 @@ export default function ChaplainContentDashboard({
           </View>
         </View>
 
-      {/* 2. SHARED DASHBOARD WIDGETS (Perlita, Muro de Oración, Contenidos, Roster, Confidencialidad) */}
-      <View style={styles.sharedWidgetsWrapper}>
-        <SharedDashboardWidgets
-          onNavigateToBible={onNavigateToBible}
-          onNavigateToContent={onNavigateToContent}
-          onNavigateToPrayers={onNavigateToPrayers}
-          onNavigateToBlogs={onNavigateToBlogs}
-          onJoinCall={onJoinCall}
-          onJoinChat={onJoinChat}
-          showRoster={true}
-        />
-      </View>
+        {/* 2. SHARED DASHBOARD WIDGETS (Perlita, Muro de Oración, Contenidos, Roster, Confidencialidad) */}
+        <View style={styles.sharedWidgetsWrapper}>
+          <SharedDashboardWidgets
+            onNavigateToBible={onNavigateToBible}
+            onNavigateToContent={onNavigateToContent}
+            onNavigateToPrayers={onNavigateToPrayers}
+            onNavigateToBlogs={onNavigateToBlogs}
+            onJoinCall={onJoinCall}
+            onJoinChat={onJoinChat}
+            showRoster={true}
+            onInitialLoadComplete={() => setIsDashboardReady(true)}
+          />
+        </View>
       </ScrollView>
+
+      {showPreloader ? (
+        <AppPreloader
+          isAppReady={isDashboardReady}
+          subtitle="PASTORAL AUDIOVISUAL"
+          onFinish={() => setShowPreloader(false)}
+        />
+      ) : null}
     </View>
   );
 }

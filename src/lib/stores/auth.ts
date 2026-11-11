@@ -1,6 +1,7 @@
 import { createStore } from './createStore';
 import { request, ApiError, setAuthToken, setOnUnauthorizedHandler } from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
+import { getChaplainProfile } from '../api/profiles';
 import { saveAuthSession, loadAuthSession, clearAuthSession } from '../storage';
 import type { AuthUser, LoginResponse } from '../../types/api';
 
@@ -23,7 +24,6 @@ export const useAuthStore = createStore<AuthState>((set, get) => ({
   isLoading: true, // Start with loading true until initial checkSession runs
 
   login: async (username: string, password: string) => {
-    set({ isLoading: true });
     try {
       const response = await request<LoginResponse>(ENDPOINTS.AUTH_LOGIN, {
         method: 'POST',
@@ -40,6 +40,18 @@ export const useAuthStore = createStore<AuthState>((set, get) => ({
         throw new Error('La sesión devolvió un rol inconsistente.');
       }
 
+      if (user.role === 'CHAPLAIN' && user.userId) {
+        try {
+          const profile = await getChaplainProfile(user.userId);
+          if (profile) {
+            user.avatarUrl = profile.avatarUrl || null;
+            user.fullName = profile.fullName || null;
+          }
+        } catch {
+          // Graceful fallback if profile not created yet or network issue
+        }
+      }
+
       // Persist to local disk so session survives app restart
       await saveAuthSession(response.token, user);
 
@@ -53,11 +65,16 @@ export const useAuthStore = createStore<AuthState>((set, get) => ({
       void clearAuthSession();
       set({ isLoading: false, token: null, user: null, isAuthenticated: false });
       if (err instanceof ApiError) {
-        if (err.status === 401) {
-          throw new Error('Credenciales inválidas');
+        if (err.status === 401 || err.status === 403) {
+          throw new Error(
+            'El usuario o la contraseña ingresados son incorrectos. Verificá tus datos e intentá nuevamente.'
+          );
         }
         if (err.body?.error) {
           throw new Error(err.body.error);
+        }
+        if (err.body?.message) {
+          throw new Error(err.body.message);
         }
       }
       throw new Error(
@@ -92,6 +109,18 @@ export const useAuthStore = createStore<AuthState>((set, get) => ({
     // 2. Validate session against backend silently in the background
     try {
       const user = await request<AuthUser>(ENDPOINTS.AUTH_ME);
+      if (user.role === 'CHAPLAIN' && user.userId) {
+        try {
+          const profile = await getChaplainProfile(user.userId);
+          if (profile) {
+            user.avatarUrl = profile.avatarUrl || null;
+            user.fullName = profile.fullName || null;
+          }
+        } catch {
+          user.avatarUrl = stored.user?.avatarUrl || null;
+          user.fullName = stored.user?.fullName || null;
+        }
+      }
       await saveAuthSession(stored.token, user);
       set({ user, isAuthenticated: true, isLoading: false });
     } catch (error: unknown) {
